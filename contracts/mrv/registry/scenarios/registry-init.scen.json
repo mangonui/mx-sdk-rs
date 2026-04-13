@@ -1,0 +1,62 @@
+{
+    "name": "registry-init",
+    "comment": "Deploy registry contract with governance address and verify initial state",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:registry"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:output/mrv-registry.mxsc.json",
+                "arguments": [
+                    "address:governance"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy-zero-governance-fails",
+            "comment": "Deploying with zero governance address must revert",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:output/mrv-registry.mxsc.json",
+                "arguments": [
+                    "0x0000000000000000000000000000000000000000000000000000000000000000"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "4",
+                "message": "str:governance must not be zero"
+            }
+        }
+    ]
+}

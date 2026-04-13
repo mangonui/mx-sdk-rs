@@ -1,0 +1,141 @@
+{
+    "name": "drwa attestation denial signals",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:auditor": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:subject": {
+                    "nonce": "0",
+                    "balance": "0"
+                },
+                "address:intruder": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_attestation"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-attestation.mxsc.json",
+                "arguments": [
+                    "address:auditor"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "approved-attestation",
+            "tx": {
+                "from": "address:auditor",
+                "to": "sc:drwa_attestation",
+                "function": "recordAttestation",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:subject",
+                    "str:MRV",
+                    "str:hash-001",
+                    "true"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "unauthorized-attestation-rejected",
+            "tx": {
+                "from": "address:intruder",
+                "to": "sc:drwa_attestation",
+                "function": "recordAttestation",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:subject",
+                    "str:MRV",
+                    "str:hash-evil",
+                    "false"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "str:caller not auditor",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "auditor-can-still-overwrite-after-rejection",
+            "tx": {
+                "from": "address:auditor",
+                "to": "sc:drwa_attestation",
+                "function": "recordAttestation",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:subject",
+                    "str:MRV",
+                    "str:hash-002",
+                    "false"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-attestation-overwritten",
+            "tx": {
+                "to": "sc:drwa_attestation",
+                "function": "getAttestation",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:subject"
+                ]
+            },
+            "expect": {
+                "out": ["*"],
+                "status": "0"
+            }
+        }
+    ]
+}

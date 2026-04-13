@@ -11,14 +11,12 @@ pub trait OnlyAdminModule {
     #[endpoint(addAdmin)]
     fn add_admin(&self, address: ManagedAddress) {
         self.admins().insert(address);
-        // TODO: event
     }
 
     #[only_owner]
     #[endpoint(removeAdmin)]
     fn remove_admin(&self, address: ManagedAddress) {
         self.admins().swap_remove(&address);
-        // TODO: event
     }
 
     #[view(getAdmins)]

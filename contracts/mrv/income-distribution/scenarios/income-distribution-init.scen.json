@@ -1,0 +1,91 @@
+{
+    "name": "mrv income distribution init",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:mrv_income_distribution"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/mrv-income-distribution.mxsc.json",
+                "arguments": [
+                    "address:governance",
+                    "str:COME-abcdef"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-pending-governance-empty",
+            "comment": "No governance transfer proposed — pendingGovernance should be empty",
+            "tx": {
+                "to": "sc:mrv_income_distribution",
+                "function": "getPendingGovernance",
+                "arguments": []
+            },
+            "expect": {
+                "out": []
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-nonexistent-distribution",
+            "comment": "Querying a non-existent distribution returns OptionalValue::None (empty output)",
+            "tx": {
+                "to": "sc:mrv_income_distribution",
+                "function": "getDistribution",
+                "arguments": [
+                    "str:DIST-999"
+                ]
+            },
+            "expect": {
+                "out": []
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-is-claimed-false",
+            "comment": "No claims made — isClaimed returns false (empty/zero)",
+            "tx": {
+                "to": "sc:mrv_income_distribution",
+                "function": "isClaimed",
+                "arguments": [
+                    "str:DIST-001",
+                    "address:owner"
+                ]
+            },
+            "expect": {
+                "out": [
+                    ""
+                ]
+            }
+        }
+    ]
+}

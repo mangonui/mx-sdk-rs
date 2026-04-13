@@ -1,0 +1,130 @@
+{
+    "name": "mrv come settlement init",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:farmer": {
+                    "nonce": "0",
+                    "balance": "0"
+                },
+                "address:project-dev": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:mrv_come_settlement"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/mrv-come-settlement.mxsc.json",
+                "arguments": [
+                    "address:governance"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "create-settlement-farmer-payout",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:mrv_come_settlement",
+                "function": "createSettlement",
+                "arguments": [
+                    "str:SETTLE-001",
+                    "address:project-dev",
+                    "address:farmer",
+                    "str:COME-abcdef",
+                    "1,000,000",
+                    "str:bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+                ],
+                "gasLimit": "15,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "create-settlement-buffer-contribution",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:mrv_come_settlement",
+                "function": "createSettlement",
+                "arguments": [
+                    "str:SETTLE-002",
+                    "address:project-dev",
+                    "address:governance",
+                    "str:COME-abcdef",
+                    "200,000",
+                    "str:bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtensmqallm"
+                ],
+                "gasLimit": "15,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-pending-governance-empty",
+            "comment": "No governance transfer proposed — pendingGovernance should be empty",
+            "tx": {
+                "to": "sc:mrv_come_settlement",
+                "function": "getPendingGovernance",
+                "arguments": []
+            },
+            "expect": {
+                "out": []
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-nonexistent-settlement",
+            "comment": "Querying a non-existent settlement returns OptionalValue::None (empty output)",
+            "tx": {
+                "to": "sc:mrv_come_settlement",
+                "function": "getSettlement",
+                "arguments": [
+                    "str:SETTLE-999"
+                ]
+            },
+            "expect": {
+                "out": []
+            }
+        }
+    ]
+}

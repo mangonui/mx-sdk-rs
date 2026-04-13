@@ -1,0 +1,259 @@
+{
+    "name": "drwa asset manager denial signal holder states",
+    "comment": "Models canonical holder states that should downstream-materialize as DRWA transfer denials",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:other": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_asset_manager"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-asset-manager.mxsc.json",
+                "arguments": ["address:owner"],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-asset",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "registerAsset",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "str:ESDT",
+                    "str:Carbon",
+                    "str:policy-carbon-1"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "holder-allowed",
+            "comment": "Downstream expectation: allowed transfer baseline",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:holder_ok",
+                    "str:approved",
+                    "str:clear",
+                    "str:accredited",
+                    "str:SG",
+                    "250",
+                    "false",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "holder-kyc-pending",
+            "comment": "Downstream expectation: DRWA_KYC_REQUIRED",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:holder_kyc",
+                    "str:pending",
+                    "str:clear",
+                    "str:accredited",
+                    "str:SG",
+                    "250",
+                    "false",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "holder-aml-blocked",
+            "comment": "Downstream expectation: DRWA_AML_BLOCKED",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:holder_aml",
+                    "str:approved",
+                    "str:blocked",
+                    "str:accredited",
+                    "str:SG",
+                    "250",
+                    "false",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "holder-transfer-locked",
+            "comment": "Downstream expectation: DRWA_TRANSFER_LOCKED",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:holder_locked",
+                    "str:approved",
+                    "str:clear",
+                    "str:accredited",
+                    "str:SG",
+                    "250",
+                    "true",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "holder-expired",
+            "comment": "Downstream expectation: DRWA_ASSET_EXPIRED after round advances past expiry",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:holder_expired",
+                    "str:approved",
+                    "str:clear",
+                    "str:accredited",
+                    "str:SG",
+                    "100",
+                    "false",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-asset-after-denial-syncs",
+            "tx": {
+                "to": "sc:drwa_asset_manager",
+                "function": "getAsset",
+                "arguments": ["str:CARBON-ab12cd"]
+            },
+            "expect": {
+                "out": ["*"],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "sync-holder-unauthorized",
+            "tx": {
+                "from": "address:other",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:holder_ok",
+                    "str:approved",
+                    "str:clear",
+                    "str:accredited",
+                    "str:SG",
+                    "252",
+                    "false",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "str:caller not authorized",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        }
+    ]
+}

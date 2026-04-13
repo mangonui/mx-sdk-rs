@@ -1,0 +1,166 @@
+{
+    "name": "drwa asset manager holder sync",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:other": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_asset_manager"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-asset-manager.mxsc.json",
+                "arguments": ["address:owner"],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-asset",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "registerAsset",
+                "arguments": [
+                    "str:HOTEL-ab12cd",
+                    "str:ESDT",
+                    "str:Hospitality",
+                    "str:policy-hotel-1"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "sync-holder",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:HOTEL-ab12cd",
+                    "address:investor1",
+                    "str:approved",
+                    "str:clear",
+                    "str:accredited",
+                    "str:SG",
+                    "250",
+                    "false",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "sync-holder-v2",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:HOTEL-ab12cd",
+                    "address:investor1",
+                    "str:approved",
+                    "str:clear",
+                    "str:accredited",
+                    "str:SG",
+                    "251",
+                    "true",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-asset-registered",
+            "tx": {
+                "to": "sc:drwa_asset_manager",
+                "function": "getAsset",
+                "arguments": ["str:HOTEL-ab12cd"]
+            },
+            "expect": {
+                "out": ["*"],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "sync-holder-unauthorized",
+            "tx": {
+                "from": "address:other",
+                "to": "sc:drwa_asset_manager",
+                "function": "syncHolderCompliance",
+                "arguments": [
+                    "str:HOTEL-ab12cd",
+                    "address:investor1",
+                    "str:approved",
+                    "str:clear",
+                    "str:accredited",
+                    "str:SG",
+                    "252",
+                    "false",
+                    "false",
+                    "true"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "str:caller not authorized",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        }
+    ]
+}

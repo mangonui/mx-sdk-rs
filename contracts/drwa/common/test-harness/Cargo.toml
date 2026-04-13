@@ -1,0 +1,20 @@
+[package]
+name = "drwa-common-test-harness"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies.multiversx-sc]
+version = "0.65.0"
+path = "../../../../framework/base"
+
+[dependencies.drwa-common]
+path = ".."
+
+[dev-dependencies.multiversx-sc-scenario]
+version = "0.65.0"
+features = ["wasmer-experimental"]
+path = "../../../../framework/scenario"

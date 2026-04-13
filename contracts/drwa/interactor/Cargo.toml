@@ -1,0 +1,41 @@
+[package]
+name = "drwa-interactor"
+version = "0.0.0"
+edition = "2024"
+publish = false
+authors = ["Dharitri <dev@dharitri.org>"]
+
+[lib]
+path = "src/drwa_interactor.rs"
+
+[dependencies.drwa-identity-registry]
+path = "../identity-registry"
+
+[dependencies.drwa-policy-registry]
+path = "../policy-registry"
+
+[dependencies.drwa-asset-manager]
+path = "../asset-manager"
+
+[dependencies.drwa-attestation]
+path = "../attestation"
+
+[dependencies.drwa-common]
+path = "../common"
+
+[dependencies.multiversx-sc-snippets]
+version = "0.65.0"
+path = "../../../../framework/snippets"
+
+[dependencies.multiversx-sc]
+version = "0.65.0"
+path = "../../../../framework/base"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+tokio = { version = "1.24" }
+serial_test = { version = "3.2.0" }
+
+[features]
+chain-simulator-tests = []

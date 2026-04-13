@@ -1,0 +1,121 @@
+{
+    "name": "mrv buffer pool init",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:carbon-credit": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:mrv_buffer_pool"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/mrv-buffer-pool.mxsc.json",
+                "arguments": [
+                    "address:governance",
+                    "address:carbon-credit"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "deposit-buffer-credits",
+            "tx": {
+                "from": "address:carbon-credit",
+                "to": "sc:mrv_buffer_pool",
+                "function": "depositBufferCredits",
+                "arguments": [
+                    "str:PROJ-001",
+                    "500,000",
+                    "1"
+                ],
+                "gasLimit": "15,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "deposit-buffer-credits-period2",
+            "tx": {
+                "from": "address:carbon-credit",
+                "to": "sc:mrv_buffer_pool",
+                "function": "depositBufferCredits",
+                "arguments": [
+                    "str:PROJ-001",
+                    "300,000",
+                    "2"
+                ],
+                "gasLimit": "15,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-total-pool-balance",
+            "comment": "500,000 + 300,000 = 800,000 deposited across two periods",
+            "tx": {
+                "to": "sc:mrv_buffer_pool",
+                "function": "getTotalPoolBalance",
+                "arguments": []
+            },
+            "expect": {
+                "out": [
+                    "800,000"
+                ]
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-pending-governance-empty",
+            "comment": "No governance transfer proposed — pendingGovernance should be empty",
+            "tx": {
+                "to": "sc:mrv_buffer_pool",
+                "function": "getPendingGovernance",
+                "arguments": []
+            },
+            "expect": {
+                "out": []
+            }
+        }
+    ]
+}

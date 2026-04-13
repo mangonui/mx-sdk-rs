@@ -1183,6 +1183,103 @@ dependencies = [
 ]
 
 [[package]]
+name = "drwa-asset-manager"
+version = "0.0.0"
+dependencies = [
+ "drwa-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "drwa-asset-manager-meta"
+version = "0.0.0"
+dependencies = [
+ "drwa-asset-manager",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "drwa-attestation"
+version = "0.0.0"
+dependencies = [
+ "drwa-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "drwa-attestation-meta"
+version = "0.0.0"
+dependencies = [
+ "drwa-attestation",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "drwa-common"
+version = "0.0.0"
+dependencies = [
+ "drwa-asset-manager",
+ "drwa-attestation",
+ "drwa-identity-registry",
+ "drwa-policy-registry",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "drwa-common-test-harness"
+version = "0.0.0"
+dependencies = [
+ "drwa-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "drwa-common-test-harness-meta"
+version = "0.0.0"
+dependencies = [
+ "drwa-common-test-harness",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "drwa-identity-registry"
+version = "0.0.0"
+dependencies = [
+ "drwa-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "drwa-identity-registry-meta"
+version = "0.0.0"
+dependencies = [
+ "drwa-identity-registry",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "drwa-policy-registry"
+version = "0.0.0"
+dependencies = [
+ "drwa-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "drwa-policy-registry-meta"
+version = "0.0.0"
+dependencies = [
+ "drwa-policy-registry",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3029,6 +3126,202 @@ name = "more-asserts"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
+
+[[package]]
+name = "mrv-aggregator"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-aggregator-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-aggregator",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-atomic-swap"
+version = "0.0.0"
+dependencies = [
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-atomic-swap-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-atomic-swap",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-buffer-pool"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-buffer-pool-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-buffer-pool",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-carbon-credit"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-carbon-credit-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-carbon-credit",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-come-settlement"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-come-settlement-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-come-settlement",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-common"
+version = "0.0.0"
+dependencies = [
+ "mrv-buffer-pool",
+ "mrv-carbon-credit",
+ "mrv-reserve-proof-registry",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-governance"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-governance-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-governance",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-governance-multisig"
+version = "0.0.0"
+dependencies = [
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-governance-multisig-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-governance-multisig",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-gsoc-registry"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-gsoc-registry-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-gsoc-registry",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-income-distribution"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-income-distribution-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-income-distribution",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-registry"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-registry-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-registry",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "mrv-reserve-proof-registry"
+version = "0.0.0"
+dependencies = [
+ "mrv-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "mrv-reserve-proof-registry-meta"
+version = "0.0.0"
+dependencies = [
+ "mrv-reserve-proof-registry",
+ "multiversx-sc-meta-lib",
+]
 
 [[package]]
 name = "multi-contract-features"

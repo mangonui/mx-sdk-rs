@@ -1,0 +1,244 @@
+{
+    "name": "governance-vvb-accreditation",
+    "comment": "Accredit a VVB via governance proposal, verify accreditation, then revoke it",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:signer1": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:verifier": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:governance"
+                }
+            ]
+        },
+        {
+            "step": "setState",
+            "currentBlockInfo": {
+                "blockTimestamp": "1000"
+            }
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:output/mrv-governance.mxsc.json",
+                "arguments": [
+                    "address:signer1",
+                    "1",
+                    "3600"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "check-not-accredited-initially",
+            "tx": {
+                "to": "sc:governance",
+                "function": "isAccreditedVvb",
+                "arguments": [
+                    "address:verifier"
+                ]
+            },
+            "expect": {
+                "out": [
+                    ""
+                ],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "propose-accredit",
+            "comment": "Propose accrediting the verifier",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "proposeVerifierAccreditation",
+                "arguments": [
+                    "str:VVB-001",
+                    "address:verifier",
+                    "1",
+                    "str:auditor"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "approve-accredit",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "approveProposal",
+                "arguments": [
+                    "str:VVB-001"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "setState",
+            "comment": "Advance past timelock",
+            "currentBlockInfo": {
+                "blockTimestamp": "4700"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "execute-accredit",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "executeProposal",
+                "arguments": [
+                    "str:VVB-001"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "check-accredited",
+            "tx": {
+                "to": "sc:governance",
+                "function": "isAccreditedVvb",
+                "arguments": [
+                    "address:verifier"
+                ]
+            },
+            "expect": {
+                "out": [
+                    "1"
+                ],
+                "status": "0"
+            }
+        },
+        {
+            "step": "setState",
+            "comment": "Reset timestamp for revoke proposal",
+            "currentBlockInfo": {
+                "blockTimestamp": "5000"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "propose-revoke",
+            "comment": "Propose revoking accreditation (approved=false)",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "proposeVerifierAccreditation",
+                "arguments": [
+                    "str:VVB-002",
+                    "address:verifier",
+                    "",
+                    "str:auditor"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "approve-revoke",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "approveProposal",
+                "arguments": [
+                    "str:VVB-002"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "setState",
+            "comment": "Advance past timelock for revoke",
+            "currentBlockInfo": {
+                "blockTimestamp": "8700"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "execute-revoke",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "executeProposal",
+                "arguments": [
+                    "str:VVB-002"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "check-revoked",
+            "comment": "Verifier should no longer be accredited",
+            "tx": {
+                "to": "sc:governance",
+                "function": "isAccreditedVvb",
+                "arguments": [
+                    "address:verifier"
+                ]
+            },
+            "expect": {
+                "out": [
+                    ""
+                ],
+                "status": "0"
+            }
+        }
+    ]
+}

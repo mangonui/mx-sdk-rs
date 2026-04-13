@@ -1,0 +1,138 @@
+{
+    "name": "registry-report-anchor",
+    "comment": "Anchor a V2 report proof and verify on-chain state, then test amend flow",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:registry"
+                }
+            ]
+        },
+        {
+            "step": "setState",
+            "currentBlockInfo": {
+                "blockTimestamp": "1700000000"
+            }
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:output/mrv-registry.mxsc.json",
+                "arguments": [
+                    "address:governance"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "anchor-report-v2",
+            "comment": "Anchor a V2 report with evidence manifest",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:registry",
+                "function": "anchorReportV2",
+                "arguments": [
+                    "str:RPT-001",
+                    "str:TENANT-A",
+                    "str:FARM-001",
+                    "str:SEASON-2025A",
+                    "str:PROJ-001",
+                    "str:sha256:report_hash_abc",
+                    "str:SHA-256",
+                    "str:JCS",
+                    "1",
+                    "1700000000",
+                    "str:sha256:manifest_hash_xyz"
+                ],
+                "gasLimit": "30,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "anchor-duplicate-season-fails",
+            "comment": "Re-anchoring the same season should fail (use amendReportV2 instead)",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:registry",
+                "function": "anchorReportV2",
+                "arguments": [
+                    "str:RPT-002",
+                    "str:TENANT-A",
+                    "str:FARM-001",
+                    "str:SEASON-2025A",
+                    "str:PROJ-001",
+                    "str:sha256:different_hash",
+                    "str:SHA-256",
+                    "str:JCS",
+                    "1",
+                    "1700000100",
+                    "str:sha256:different_manifest"
+                ],
+                "gasLimit": "30,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "4",
+                "message": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "anchor-empty-report-hash-fails",
+            "comment": "Empty report hash must be rejected",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:registry",
+                "function": "anchorReportV2",
+                "arguments": [
+                    "str:RPT-003",
+                    "str:TENANT-B",
+                    "str:FARM-002",
+                    "str:SEASON-2025B",
+                    "str:PROJ-002",
+                    "",
+                    "str:SHA-256",
+                    "str:JCS",
+                    "1",
+                    "1700000000",
+                    "str:sha256:manifest"
+                ],
+                "gasLimit": "30,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "4",
+                "message": "str:empty report hash"
+            }
+        }
+    ]
+}

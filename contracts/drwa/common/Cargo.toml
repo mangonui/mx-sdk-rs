@@ -1,0 +1,30 @@
+[package]
+name = "drwa-common"
+version = "0.0.0"
+edition = "2024"
+publish = false
+authors = ["Dharitri <dev@dharitri.org>"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies.multiversx-sc]
+version = "0.65.0"
+path = "../../../framework/base"
+
+[dev-dependencies.multiversx-sc-scenario]
+version = "0.65.0"
+features = ["wasmer-experimental"]
+path = "../../../framework/scenario"
+
+[dev-dependencies.drwa-policy-registry]
+path = "../policy-registry"
+
+[dev-dependencies.drwa-identity-registry]
+path = "../identity-registry"
+
+[dev-dependencies.drwa-asset-manager]
+path = "../asset-manager"
+
+[dev-dependencies.drwa-attestation]
+path = "../attestation"

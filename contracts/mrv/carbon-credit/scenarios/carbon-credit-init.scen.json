@@ -1,0 +1,146 @@
+{
+    "name": "mrv carbon credit init",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:buffer-pool": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:mrv_carbon_credit"
+                }
+            ],
+            "currentBlockInfo": {
+                "blockTimestamp": "1000"
+            }
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/mrv-carbon-credit.mxsc.json",
+                "arguments": [
+                    "address:governance",
+                    "address:buffer-pool"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-ime-record",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:mrv_carbon_credit",
+                "function": "registerImeRecord",
+                "arguments": [
+                    "str:PROJ-001",
+                    "str:sha256:abc123def456789012345678901234567890123456789012345678901234",
+                    "str:sha256:param_pack_hash_0000000000000000000000000000000000000000",
+                    "str:sha256:calibration_hash_000000000000000000000000000000000000000",
+                    "str:sha256:strata_proto_hash_00000000000000000000000000000000000000",
+                    "str:v1.2.0",
+                    "999999999",
+                    "str:AG_SOC"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-committed-bundle",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:mrv_carbon_credit",
+                "function": "registerCommittedBundle",
+                "arguments": [
+                    "str:PAI-001",
+                    "1",
+                    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-pending-governance-empty",
+            "comment": "No governance transfer proposed — pendingGovernance should be empty",
+            "tx": {
+                "to": "sc:mrv_carbon_credit",
+                "function": "getPendingGovernance",
+                "arguments": []
+            },
+            "expect": {
+                "out": []
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-gsoc-verifier-not-approved",
+            "comment": "No GSOC verifiers added — isGsocVerifierApproved returns false",
+            "tx": {
+                "to": "sc:mrv_carbon_credit",
+                "function": "isGsocVerifierApproved",
+                "arguments": [
+                    "address:owner"
+                ]
+            },
+            "expect": {
+                "out": [
+                    ""
+                ]
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-nonexistent-retirement",
+            "comment": "No retirements initiated — getRetirement returns OptionalValue::None (empty)",
+            "tx": {
+                "to": "sc:mrv_carbon_credit",
+                "function": "getRetirement",
+                "arguments": [
+                    "str:RET-999"
+                ]
+            },
+            "expect": {
+                "out": []
+            }
+        }
+    ]
+}

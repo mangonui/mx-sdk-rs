@@ -1,0 +1,177 @@
+{
+    "name": "governance-propose-accept",
+    "comment": "Propose emergency pause, approve, wait for timelock, execute, and verify paused state",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:signer1": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:signer2": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:governance"
+                }
+            ]
+        },
+        {
+            "step": "setState",
+            "comment": "Set block timestamp to 1000",
+            "currentBlockInfo": {
+                "blockTimestamp": "1000"
+            }
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:output/mrv-governance.mxsc.json",
+                "arguments": [
+                    "address:signer1",
+                    "address:signer2",
+                    "1",
+                    "3600"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "propose-pause",
+            "comment": "Signer1 proposes emergency pause",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "proposeEmergencyPause",
+                "arguments": [
+                    "str:PAUSE-001",
+                    "1"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "approve-pause",
+            "comment": "Signer1 approves the proposal (threshold is 1 so this suffices)",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "approveProposal",
+                "arguments": [
+                    "str:PAUSE-001"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "execute-before-timelock-fails",
+            "comment": "Execution before timelock should fail",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "executeProposal",
+                "arguments": [
+                    "str:PAUSE-001"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "4",
+                "message": "str:timelock not elapsed"
+            }
+        },
+        {
+            "step": "setState",
+            "comment": "Advance block timestamp past timelock (1000 + 3600 = 4600)",
+            "currentBlockInfo": {
+                "blockTimestamp": "4700"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "execute-pause",
+            "comment": "Execute the pause proposal after timelock",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "executeProposal",
+                "arguments": [
+                    "str:PAUSE-001"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-paused-true",
+            "tx": {
+                "to": "sc:governance",
+                "function": "getPaused",
+                "arguments": []
+            },
+            "expect": {
+                "out": [
+                    "1"
+                ],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "execute-again-fails",
+            "comment": "Re-executing same proposal should fail",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:governance",
+                "function": "executeProposal",
+                "arguments": [
+                    "str:PAUSE-001"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "4",
+                "message": "str:proposal already executed"
+            }
+        }
+    ]
+}

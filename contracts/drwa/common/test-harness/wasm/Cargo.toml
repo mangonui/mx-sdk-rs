@@ -1,0 +1,23 @@
+[package]
+name = "drwa-common-test-harness-wasm"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies.drwa-common-test-harness]
+path = ".."
+
+[dependencies.multiversx-sc-wasm-adapter]
+version = "0.65.0"
+path = "../../../../../framework/wasm-adapter"
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = false
