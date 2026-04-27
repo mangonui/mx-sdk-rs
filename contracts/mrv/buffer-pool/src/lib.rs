@@ -3,6 +3,10 @@
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
+use mrv_common::resolve_storage_version_upgrade;
+
+pub mod governance_proxy;
+
 /// Replenishment threshold above which governance approval is required.
 const REPLENISHMENT_GOVERNANCE_THRESHOLD_BPS: u64 = 1_000;
 /// Minimum epoch interval between replenishments for the same project.
@@ -10,7 +14,9 @@ const REPLENISHMENT_COOLDOWN_EPOCHS: u64 = 1_500;
 
 /// Per-project buffer balance tracking deposits, cancellations, and replenishments.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct BufferRecord<M: ManagedTypeApi> {
     pub project_id: ManagedBuffer<M>,
     pub total_deposited: BigUint<M>,
@@ -29,19 +35,50 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
     #[init]
     fn init(&self, governance: ManagedAddress, carbon_credit_addr: ManagedAddress) {
         require!(!governance.is_zero(), "governance must not be zero");
-        require!(!carbon_credit_addr.is_zero(), "carbon_credit_addr must not be zero");
+        require!(
+            !carbon_credit_addr.is_zero(),
+            "carbon_credit_addr must not be zero"
+        );
         self.governance().set(governance);
         self.carbon_credit_addr().set(carbon_credit_addr);
         self.total_pool_balance().set(BigUint::zero());
         self.storage_version().set(1u32);
     }
 
+    #[endpoint(setGovernanceReadAddress)]
+    fn set_governance_read_address(&self, addr: ManagedAddress) {
+        self.require_governance_or_owner();
+        require!(!addr.is_zero(), "governance_read_address must not be zero");
+        self.governance_read_address().set(&addr);
+        self.governance_read_address_updated_event(&addr);
+    }
+
+    #[endpoint(clearGovernanceReadAddress)]
+    fn clear_governance_read_address(&self) {
+        self.require_governance_or_owner();
+        self.governance_read_address().clear();
+        self.governance_read_address_cleared_event();
+    }
+
     /// Updates the authorized carbon-credit contract address.
     #[endpoint(setCarbonCreditAddr)]
     fn set_carbon_credit_addr(&self, addr: ManagedAddress) {
+        self.require_not_paused();
         self.require_governance_or_owner();
         require!(!addr.is_zero(), "carbon_credit_addr must not be zero");
-        self.carbon_credit_addr().set(addr);
+        self.carbon_credit_addr().set(&addr);
+        self.carbon_credit_addr_updated_event(&addr);
+    }
+
+    /// Configures the canonical reserve token identifier controlled by this
+    /// buffer-pool contract.
+    #[endpoint(setBufferTokenId)]
+    fn set_buffer_token_id(&self, token_id: TokenIdentifier) {
+        self.require_not_paused();
+        self.require_governance_or_owner();
+        require!(token_id.is_valid_esdt_identifier(), "invalid token_id");
+        self.buffer_token_id().set(&token_id);
+        self.buffer_token_id_updated_event(&token_id);
     }
 
     /// Records a buffer contribution for a project and monitoring period.
@@ -54,25 +91,36 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
         amount_scaled: BigUint,
         monitoring_period_n: u64,
     ) {
+        self.require_not_paused();
         self.require_authorized_caller();
         require!(!project_id.is_empty(), "empty project_id");
         require!(amount_scaled > 0u64, "amount must be positive");
         require!(monitoring_period_n > 0, "invalid monitoring_period_n");
 
         if !self.buffer_records().contains_key(&project_id) {
-            self.buffer_records().insert(project_id.clone(), BufferRecord {
-                project_id: project_id.clone(),
-                total_deposited: BigUint::zero(),
-                total_cancelled: BigUint::zero(),
-                total_replenished: BigUint::zero(),
-                last_replenishment_epoch: 0u64,
-            });
+            self.buffer_records().insert(
+                project_id.clone(),
+                BufferRecord {
+                    project_id: project_id.clone(),
+                    total_deposited: BigUint::zero(),
+                    total_cancelled: BigUint::zero(),
+                    total_replenished: BigUint::zero(),
+                    last_replenishment_epoch: 0u64,
+                },
+            );
         }
 
-        self.buffer_records().entry(project_id.clone()).and_modify(|r| {
-            r.total_deposited += &amount_scaled;
-        });
+        self.buffer_records()
+            .entry(project_id.clone())
+            .and_modify(|r| {
+                r.total_deposited += &amount_scaled;
+            });
 
+        let buffer_token_id = self.require_buffer_token_id();
+        self.send()
+            .esdt_local_mint(&buffer_token_id, 0, &amount_scaled);
+        self.total_buffer_minted()
+            .update(|total| *total += &amount_scaled);
         self.total_pool_balance().update(|b| *b += &amount_scaled);
         self.buffer_deposited_event(&project_id, &amount_scaled);
     }
@@ -87,6 +135,7 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
         reversal_amount_scaled: BigUint,
         reason_cid: ManagedBuffer,
     ) {
+        self.require_not_paused();
         self.require_governance_or_owner();
         require!(!project_id.is_empty(), "empty project_id");
         require!(reversal_amount_scaled > 0u64, "amount must be positive");
@@ -105,13 +154,24 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
             "CANCELLATION_EXCEEDS_AVAILABLE: cannot cancel more than deposited minus already cancelled"
         );
 
-        self.buffer_records().entry(project_id.clone()).and_modify(|r| {
-            r.total_cancelled += &reversal_amount_scaled;
-        });
+        self.buffer_records()
+            .entry(project_id.clone())
+            .and_modify(|r| {
+                r.total_cancelled += &reversal_amount_scaled;
+            });
 
         let pool_balance = self.total_pool_balance().get();
-        require!(pool_balance >= reversal_amount_scaled, "POOL_BALANCE_UNDERFLOW: accounting error");
-        self.total_pool_balance().set(&pool_balance - &reversal_amount_scaled);
+        require!(
+            pool_balance >= reversal_amount_scaled,
+            "POOL_BALANCE_UNDERFLOW: accounting error"
+        );
+        let buffer_token_id = self.require_buffer_token_id();
+        self.send()
+            .esdt_local_burn(&buffer_token_id, 0, &reversal_amount_scaled);
+        self.total_buffer_burned()
+            .update(|total| *total += &reversal_amount_scaled);
+        self.total_pool_balance()
+            .set(&pool_balance - &reversal_amount_scaled);
 
         self.buffer_cancelled_event(&project_id, &reason_cid, &reversal_amount_scaled);
     }
@@ -127,6 +187,7 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
         amount_scaled: BigUint,
         justification_cid: ManagedBuffer,
     ) {
+        self.require_not_paused();
         self.require_authorized_caller();
         require!(!project_id.is_empty(), "empty project_id");
         require!(amount_scaled > 0u64, "amount must be positive");
@@ -152,29 +213,34 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
             );
         }
         let threshold = &net_live * REPLENISHMENT_GOVERNANCE_THRESHOLD_BPS / 10_000u64;
-        if amount_scaled > threshold {
+        let cumulative_replenishment = &record.total_replenished + &amount_scaled;
+        if cumulative_replenishment > threshold {
             let caller = self.blockchain().get_caller();
             require!(
                 caller == self.governance().get(),
-                "replenishment exceeds 10% threshold — governance approval required"
+                "replenishment exceeds 10% cumulative threshold — governance approval required"
             );
             self.buffer_replenishment_governance_required_event(&project_id, &amount_scaled);
         }
 
         let current_epoch = self.blockchain().get_block_epoch();
-        // Skip cooldown check for the first-ever replenishment (total_replenished == 0)
-        if record.total_replenished > 0u64 {
-            require!(
-                current_epoch >= record.last_replenishment_epoch + REPLENISHMENT_COOLDOWN_EPOCHS,
-                "replenishment rate limit: 1 per 90 days per project"
-            );
-        }
+        require!(
+            current_epoch >= record.last_replenishment_epoch + REPLENISHMENT_COOLDOWN_EPOCHS,
+            "replenishment rate limit: 1 per 90 days per project"
+        );
 
-        self.buffer_records().entry(project_id.clone()).and_modify(|r| {
-            r.total_replenished += &amount_scaled;
-            r.last_replenishment_epoch = current_epoch;
-        });
+        self.buffer_records()
+            .entry(project_id.clone())
+            .and_modify(|r| {
+                r.total_replenished += &amount_scaled;
+                r.last_replenishment_epoch = current_epoch;
+            });
 
+        let buffer_token_id = self.require_buffer_token_id();
+        self.send()
+            .esdt_local_mint(&buffer_token_id, 0, &amount_scaled);
+        self.total_buffer_minted()
+            .update(|total| *total += &amount_scaled);
         self.total_pool_balance().update(|b| *b += &amount_scaled);
         self.buffer_replenished_event(&project_id, &amount_scaled);
     }
@@ -199,13 +265,26 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
         let caller = self.blockchain().get_caller();
         let is_governance = !self.governance().is_empty() && caller == self.governance().get();
         let is_owner = caller == self.blockchain().get_owner_address();
-        let is_carbon_credit = !self.carbon_credit_addr().is_empty() && caller == self.carbon_credit_addr().get();
+        let is_carbon_credit =
+            !self.carbon_credit_addr().is_empty() && caller == self.carbon_credit_addr().get();
         let is_whitelisted = self.authorized_callers().contains(&caller);
-        require!(is_governance || is_owner || is_carbon_credit || is_whitelisted, "caller not authorized");
+        require!(
+            is_governance || is_owner || is_carbon_credit || is_whitelisted,
+            "caller not authorized"
+        );
     }
 
     #[storage_mapper("carbonCreditAddr")]
     fn carbon_credit_addr(&self) -> SingleValueMapper<ManagedAddress>;
+
+    #[view(getGovernanceReadAddress)]
+    #[storage_mapper("governanceReadAddress")]
+    fn governance_read_address(&self) -> SingleValueMapper<ManagedAddress>;
+
+    /// Canonical reserve token identifier (`dVCU-BUF` in the adopted model).
+    #[view(getBufferTokenId)]
+    #[storage_mapper("bufferTokenId")]
+    fn buffer_token_id(&self) -> SingleValueMapper<TokenIdentifier>;
 
     #[storage_mapper("bufferRecords")]
     fn buffer_records(&self) -> MapMapper<ManagedBuffer, BufferRecord<Self::Api>>;
@@ -213,12 +292,18 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
     #[storage_mapper("totalPoolBalance")]
     fn total_pool_balance(&self) -> SingleValueMapper<BigUint>;
 
+    /// Monotonic reserve-token minted supply counter.
+    #[view(getTotalBufferMinted)]
+    #[storage_mapper("totalBufferMinted")]
+    fn total_buffer_minted(&self) -> SingleValueMapper<BigUint>;
+
+    /// Monotonic reserve-token burned supply counter.
+    #[view(getTotalBufferBurned)]
+    #[storage_mapper("totalBufferBurned")]
+    fn total_buffer_burned(&self) -> SingleValueMapper<BigUint>;
+
     #[event("bufferDeposited")]
-    fn buffer_deposited_event(
-        &self,
-        #[indexed] project_id: &ManagedBuffer,
-        amount: &BigUint,
-    );
+    fn buffer_deposited_event(&self, #[indexed] project_id: &ManagedBuffer, amount: &BigUint);
 
     #[event("bufferCancelled")]
     fn buffer_cancelled_event(
@@ -229,11 +314,7 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
     );
 
     #[event("bufferReplenished")]
-    fn buffer_replenished_event(
-        &self,
-        #[indexed] project_id: &ManagedBuffer,
-        amount: &BigUint,
-    );
+    fn buffer_replenished_event(&self, #[indexed] project_id: &ManagedBuffer, amount: &BigUint);
 
     #[event("bufferReplenishmentGovernanceRequired")]
     fn buffer_replenishment_governance_required_event(
@@ -277,16 +358,72 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
     #[event("authorizedCallerRemoved")]
     fn authorized_caller_removed_event(&self, #[indexed] caller: &ManagedAddress);
 
+    #[event("governanceReadAddressUpdated")]
+    fn governance_read_address_updated_event(
+        &self,
+        #[indexed] governance_read_address: &ManagedAddress,
+    );
+
+    #[event("governanceReadAddressCleared")]
+    fn governance_read_address_cleared_event(&self);
+
+    #[event("carbonCreditAddrUpdated")]
+    fn carbon_credit_addr_updated_event(&self, #[indexed] carbon_credit_addr: &ManagedAddress);
+
+    #[event("bufferTokenIdUpdated")]
+    fn buffer_token_id_updated_event(&self, #[indexed] token_id: &TokenIdentifier);
+
     /// Storage layout version for forward-compatible upgrades.
     #[view(getStorageVersion)]
     #[storage_mapper("storageVersion")]
     fn storage_version(&self) -> SingleValueMapper<u32>;
 
+    fn require_buffer_token_id(&self) -> TokenIdentifier {
+        require!(
+            !self.buffer_token_id().is_empty(),
+            "BUFFER_TOKEN_NOT_CONFIGURED"
+        );
+        self.buffer_token_id().get()
+    }
+
+    fn require_not_paused(&self) {
+        if self.governance_read_address().is_empty() {
+            let authority = if !self.governance().is_empty() {
+                self.governance().get()
+            } else {
+                self.blockchain().get_owner_address()
+            };
+            require!(
+                !self.blockchain().is_smart_contract(&authority),
+                "MRV_GOVERNANCE_READ_NOT_CONFIGURED"
+            );
+            return;
+        }
+
+        use governance_proxy::GovernanceProxy;
+
+        let governance_read_address = self.governance_read_address().get();
+        let gas_for_query = self.blockchain().get_gas_left() / 16;
+
+        let paused: bool = self
+            .tx()
+            .to(&governance_read_address)
+            .gas(gas_for_query)
+            .typed(GovernanceProxy)
+            .get_paused()
+            .returns(ReturnsResult)
+            .sync_call_readonly();
+
+        require!(!paused, "MRV_GOVERNANCE_PAUSED");
+    }
+
     #[upgrade]
     fn upgrade(&self) {
-        let current = self.storage_version().get();
-        if current < 1u32 {
-            self.storage_version().set(1u32);
+        let stored = self.storage_version().get();
+        let target = resolve_storage_version_upgrade(stored, 1u32, 1u32)
+            .unwrap_or_else(|message| sc_panic!(message));
+        if stored != target {
+            self.storage_version().set(target);
         }
     }
 }

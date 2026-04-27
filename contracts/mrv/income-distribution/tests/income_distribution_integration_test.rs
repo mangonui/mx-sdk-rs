@@ -33,7 +33,11 @@ fn claim_yield_rejects_oversized_merkle_proof() {
     let mut world = world();
 
     world.account(OWNER).nonce(1).balance(1_000_000u64);
-    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64).esdt_balance(COME_TOKEN, 100_000u64);
+    world
+        .account(GOVERNANCE)
+        .nonce(1)
+        .balance(1_000_000u64)
+        .esdt_balance(COME_TOKEN, 100_000u64);
     world
         .account(HOLDER_A)
         .nonce(1)
@@ -66,7 +70,11 @@ fn claim_yield_rejects_oversized_merkle_proof() {
             ManagedBuffer::from("Qm-test-cid"),
             100_000u64,
         )
-        .payment(EsdtTokenPayment::new(COME_TOKEN.to_esdt_token_identifier(), 0u64, BigUint::from(10_000u64)))
+        .payment(EsdtTokenPayment::new(
+            COME_TOKEN.to_esdt_token_identifier(),
+            0u64,
+            BigUint::from(10_000u64),
+        ))
         .run();
 
     // Build an oversized proof (65 entries — exceeds the 64-depth limit)
@@ -96,7 +104,11 @@ fn fund_and_query_lifecycle() {
     let mut world = world();
 
     world.account(OWNER).nonce(1).balance(1_000_000u64);
-    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64).esdt_balance(COME_TOKEN, 100_000u64);
+    world
+        .account(GOVERNANCE)
+        .nonce(1)
+        .balance(1_000_000u64)
+        .esdt_balance(COME_TOKEN, 100_000u64);
 
     // Deploy
     world
@@ -125,7 +137,11 @@ fn fund_and_query_lifecycle() {
             ManagedBuffer::from("Qm-lifecycle-cid"),
             100_000u64,
         )
-        .payment(EsdtTokenPayment::new(COME_TOKEN.to_esdt_token_identifier(), 0u64, BigUint::from(5_000u64)))
+        .payment(EsdtTokenPayment::new(
+            COME_TOKEN.to_esdt_token_identifier(),
+            0u64,
+            BigUint::from(5_000u64),
+        ))
         .run();
 
     // Verify distribution exists via view

@@ -17,6 +17,7 @@ name = "abi-tester"
 version = "0.0.0"
 dependencies = [
  "bitflags 2.11.0",
+ "drwa-common",
  "multiversx-sc",
  "multiversx-sc-meta-lib",
  "multiversx-sc-scenario",
@@ -1187,6 +1188,7 @@ name = "drwa-asset-manager"
 version = "0.0.0"
 dependencies = [
  "drwa-common",
+ "drwa-policy-registry",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -1213,6 +1215,23 @@ name = "drwa-attestation-meta"
 version = "0.0.0"
 dependencies = [
  "drwa-attestation",
+ "multiversx-sc-meta-lib",
+]
+
+[[package]]
+name = "drwa-auth-admin"
+version = "0.0.0"
+dependencies = [
+ "drwa-common",
+ "multiversx-sc",
+ "multiversx-sc-scenario",
+]
+
+[[package]]
+name = "drwa-auth-admin-meta"
+version = "0.0.0"
+dependencies = [
+ "drwa-auth-admin",
  "multiversx-sc-meta-lib",
 ]
 
@@ -3131,7 +3150,9 @@ checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 name = "mrv-aggregator"
 version = "0.0.0"
 dependencies = [
+ "ed25519-dalek",
  "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3148,6 +3169,8 @@ dependencies = [
 name = "mrv-atomic-swap"
 version = "0.0.0"
 dependencies = [
+ "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3165,6 +3188,7 @@ name = "mrv-buffer-pool"
 version = "0.0.0"
 dependencies = [
  "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3181,7 +3205,9 @@ dependencies = [
 name = "mrv-carbon-credit"
 version = "0.0.0"
 dependencies = [
+ "mrv-buffer-pool",
  "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3199,6 +3225,7 @@ name = "mrv-come-settlement"
 version = "0.0.0"
 dependencies = [
  "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3243,6 +3270,7 @@ dependencies = [
 name = "mrv-governance-multisig"
 version = "0.0.0"
 dependencies = [
+ "mrv-common",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3260,6 +3288,7 @@ name = "mrv-gsoc-registry"
 version = "0.0.0"
 dependencies = [
  "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3277,6 +3306,7 @@ name = "mrv-income-distribution"
 version = "0.0.0"
 dependencies = [
  "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3294,6 +3324,7 @@ name = "mrv-registry"
 version = "0.0.0"
 dependencies = [
  "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3310,7 +3341,10 @@ dependencies = [
 name = "mrv-reserve-proof-registry"
 version = "0.0.0"
 dependencies = [
+ "mrv-buffer-pool",
+ "mrv-carbon-credit",
  "mrv-common",
+ "mrv-governance",
  "multiversx-sc",
  "multiversx-sc-scenario",
 ]
@@ -3433,8 +3467,6 @@ dependencies = [
 [[package]]
 name = "multiversx-chain-vm-executor"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b72af69cd251075c0bc020ea72f0d2056ac0966fc17aced17b866a5324536e28"
 dependencies = [
  "serde",
 ]
@@ -3442,8 +3474,6 @@ dependencies = [
 [[package]]
 name = "multiversx-chain-vm-executor-wasmer-experimental"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9a714b389463294ca1f9c8895804a6a2bac11b9609aaeabe633cfb033ac62f7"
 dependencies = [
  "log",
  "loupe",

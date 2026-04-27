@@ -19,3 +19,6 @@ path = "../common"
 version = "0.65.0"
 features = ["wasmer-experimental"]
 path = "../../../framework/scenario"
+
+[dev-dependencies.mrv-governance]
+path = "../governance"

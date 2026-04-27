@@ -7,8 +7,8 @@
 #![allow(dead_code)]
 #![allow(clippy::all)]
 
-use multiversx_sc::proxy_imports::*;
 use crate::DistributionRecord;
+use multiversx_sc::proxy_imports::*;
 
 pub struct IncomeDistributionProxy;
 

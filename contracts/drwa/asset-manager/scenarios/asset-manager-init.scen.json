@@ -17,9 +17,31 @@
                 {
                     "creatorAddress": "address:owner",
                     "creatorNonce": "0",
+                    "newAddress": "sc:drwa_policy_registry"
+                },
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "1",
                     "newAddress": "sc:drwa_asset_manager"
                 }
             ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy-policy-registry",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../../policy-registry/output/drwa-policy-registry.mxsc.json",
+                "arguments": ["address:owner"],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
         },
         {
             "step": "scDeploy",
@@ -28,6 +50,50 @@
                 "from": "address:owner",
                 "contractCode": "mxsc:../output/drwa-asset-manager.mxsc.json",
                 "arguments": ["address:owner"],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "set-policy-registry-address",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_asset_manager",
+                "function": "setPolicyRegistryAddress",
+                "arguments": ["sc:drwa_policy_registry"],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "set-token-policy",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_policy_registry",
+                "function": "setTokenPolicy",
+                "arguments": [
+                    "str:HOTEL-ab12cd",
+                    "true",
+                    "false",
+                    "false",
+                    "false",
+                    "nested:str:ACCREDITED",
+                    "nested:str:SG"
+                ],
                 "gasLimit": "50,000,000",
                 "gasPrice": "0"
             },
@@ -49,7 +115,7 @@
                     "str:HOTEL-ab12cd",
                     "str:ESDT",
                     "str:Hospitality",
-                    "str:policy-hotel-1"
+                    "str:HOTEL-ab12cd"
                 ],
                 "gasLimit": "50,000,000",
                 "gasPrice": "0"
@@ -78,7 +144,7 @@
                     "250",
                     "false",
                     "false",
-                    "true"
+                    "false"
                 ],
                 "gasLimit": "100,000,000",
                 "gasPrice": "0"
@@ -107,7 +173,7 @@
                     "251",
                     "true",
                     "false",
-                    "true"
+                    "false"
                 ],
                 "gasLimit": "100,000,000",
                 "gasPrice": "0"
@@ -149,7 +215,7 @@
                     "252",
                     "false",
                     "false",
-                    "true"
+                    "false"
                 ],
                 "gasLimit": "100,000,000",
                 "gasPrice": "0"

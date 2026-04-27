@@ -7,10 +7,10 @@
 #![allow(dead_code)]
 #![allow(clippy::all)]
 
-use multiversx_sc::proxy_imports::*;
-use drwa_common::DrwaSyncEnvelope;
+use crate::{AssetLegalCustodyPack, AssetRecord};
 use drwa_common;
-use crate::AssetRecord;
+use drwa_common::DrwaSyncEnvelope;
+use multiversx_sc::proxy_imports::*;
 
 pub struct DrwaAssetManagerProxy;
 
@@ -100,6 +100,37 @@ where
             .original_result()
     }
 
+    pub fn attach_asset_legal_custody_pack<
+        Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg1: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg2: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg3: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg4: ProxyArg<ManagedAddress<Env::Api>>,
+        Arg5: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg6: ProxyArg<ManagedBuffer<Env::Api>>,
+    >(
+        self,
+        token_id: Arg0,
+        legal_pack_hash: Arg1,
+        custody_attestation_hash: Arg2,
+        insurance_ref_hash: Arg3,
+        valuation_authority: Arg4,
+        redemption_terms_hash: Arg5,
+        asset_state_proof_hash: Arg6,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ()> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("attachAssetLegalCustodyPack")
+            .argument(&token_id)
+            .argument(&legal_pack_hash)
+            .argument(&custody_attestation_hash)
+            .argument(&insurance_ref_hash)
+            .argument(&valuation_authority)
+            .argument(&redemption_terms_hash)
+            .argument(&asset_state_proof_hash)
+            .original_result()
+    }
+
     pub fn sync_holder_compliance<
         Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
         Arg1: ProxyArg<ManagedAddress<Env::Api>>,
@@ -137,6 +168,19 @@ where
             .argument(&transfer_locked)
             .argument(&receive_locked)
             .argument(&auditor_authorized)
+            .original_result()
+    }
+
+    pub fn set_policy_registry_address<
+        Arg0: ProxyArg<ManagedAddress<Env::Api>>,
+    >(
+        self,
+        policy_registry: Arg0,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ()> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("setPolicyRegistryAddress")
+            .argument(&policy_registry)
             .original_result()
     }
 
@@ -222,12 +266,34 @@ where
             .original_result()
     }
 
+    pub fn asset_legal_custody_pack<
+        Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
+    >(
+        self,
+        token_id: Arg0,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, AssetLegalCustodyPack<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("getAssetLegalCustodyPack")
+            .argument(&token_id)
+            .original_result()
+    }
+
     pub fn governance(
         self,
     ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedAddress<Env::Api>> {
         self.wrapped_tx
             .payment(NotPayable)
             .raw_call("getGovernance")
+            .original_result()
+    }
+
+    pub fn policy_registry_address(
+        self,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedAddress<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("getPolicyRegistryAddress")
             .original_result()
     }
 

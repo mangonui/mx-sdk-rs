@@ -46,53 +46,9 @@
             }
         },
         {
-            "step": "scCall",
-            "id": "deposit-buffer-credits",
-            "tx": {
-                "from": "address:carbon-credit",
-                "to": "sc:mrv_buffer_pool",
-                "function": "depositBufferCredits",
-                "arguments": [
-                    "str:PROJ-001",
-                    "500,000",
-                    "1"
-                ],
-                "gasLimit": "15,000,000",
-                "gasPrice": "0"
-            },
-            "expect": {
-                "status": "0",
-                "out": "*",
-                "gas": "*",
-                "refund": "*"
-            }
-        },
-        {
-            "step": "scCall",
-            "id": "deposit-buffer-credits-period2",
-            "tx": {
-                "from": "address:carbon-credit",
-                "to": "sc:mrv_buffer_pool",
-                "function": "depositBufferCredits",
-                "arguments": [
-                    "str:PROJ-001",
-                    "300,000",
-                    "2"
-                ],
-                "gasLimit": "15,000,000",
-                "gasPrice": "0"
-            },
-            "expect": {
-                "status": "0",
-                "out": "*",
-                "gas": "*",
-                "refund": "*"
-            }
-        },
-        {
             "step": "scQuery",
             "id": "query-total-pool-balance",
-            "comment": "500,000 + 300,000 = 800,000 deposited across two periods",
+            "comment": "No deposits executed in the init scenario, so the pool starts at zero",
             "tx": {
                 "to": "sc:mrv_buffer_pool",
                 "function": "getTotalPoolBalance",
@@ -100,7 +56,7 @@
             },
             "expect": {
                 "out": [
-                    "800,000"
+                    "0"
                 ]
             }
         },

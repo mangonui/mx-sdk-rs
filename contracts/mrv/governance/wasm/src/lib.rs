@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           23
+// Endpoints:                           25
 // Async Callback (empty):               1
-// Total number of exported functions:  26
+// Total number of exported functions:  28
 
 #![no_std]
 
@@ -20,10 +20,10 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         upgrade => upgrade
-        addSigner => add_signer
-        removeSigner => remove_signer
-        setApprovalThreshold => set_approval_threshold
-        setTimelockSeconds => set_timelock_seconds
+        proposeAddSigner => propose_add_signer
+        proposeRemoveSigner => propose_remove_signer
+        proposeApprovalThresholdChange => propose_approval_threshold_change
+        proposeTimelockChange => propose_timelock_change
         proposeEmergencyPause => propose_emergency_pause
         proposeVerifierAccreditation => propose_verifier_accreditation
         proposeBadgeIssuance => propose_badge_issuance
@@ -40,8 +40,10 @@ multiversx_sc_wasm_adapter::endpoints! {
         proposeGsocVerifier => propose_gsoc_verifier
         approveGsocVerifierProposal => approve_gsoc_verifier_proposal
         executeGsocVerifierProposal => execute_gsoc_verifier_proposal
-        removeGsocVerifier => remove_gsoc_verifier
+        proposeRemoveGsocVerifier => propose_remove_gsoc_verifier
         isGsocVerifierApproved => is_gsoc_verifier_approved
+        getGsocVerifierRevokedAt => get_gsoc_verifier_revoked_at
+        isGsocVerifierReviewRequired => is_gsoc_verifier_review_required
         getStorageVersion => storage_version
     )
 }

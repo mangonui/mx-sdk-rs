@@ -28,12 +28,16 @@ async fn test_install_debugger() {
         None => {
             eprintln!("skipping install_debugger test: HOME is not set");
             return;
-        },
+        }
     };
     let vscode_logs_dir = home_dir.join(".config/Code/logs");
     let vscode_extensions_dir = home_dir.join(".vscode/extensions");
-    if !is_writable_or_creatable(&vscode_logs_dir) || !is_writable_or_creatable(&vscode_extensions_dir) {
-        eprintln!("skipping install_debugger test: VS Code directories are not writable in this environment");
+    if !is_writable_or_creatable(&vscode_logs_dir)
+        || !is_writable_or_creatable(&vscode_extensions_dir)
+    {
+        eprintln!(
+            "skipping install_debugger test: VS Code directories are not writable in this environment"
+        );
         return;
     }
 

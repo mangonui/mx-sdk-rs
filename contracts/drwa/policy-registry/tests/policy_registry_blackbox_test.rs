@@ -46,7 +46,7 @@ fn policy_registry_blackbox_deploy_and_set_policy() {
         .run();
     assert_eq!(gov, GOVERNANCE.to_managed_address());
 
-    // Set a token policy from the owner (owner is authorized via require_governance_or_owner)
+    // Set a token policy from the configured governance address.
     let mut investor_classes: ManagedVec<StaticApi, ManagedBuffer<StaticApi>> = ManagedVec::new();
     investor_classes.push(ManagedBuffer::from(b"ACCREDITED"));
     investor_classes.push(ManagedBuffer::from(b"QUALIFIED"));
@@ -57,7 +57,7 @@ fn policy_registry_blackbox_deploy_and_set_policy() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(DrwaPolicyRegistryProxy)
         .set_token_policy(
@@ -163,7 +163,7 @@ fn policy_registry_blackbox_version_increments() {
     // First set_token_policy
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(DrwaPolicyRegistryProxy)
         .set_token_policy(
@@ -189,7 +189,7 @@ fn policy_registry_blackbox_version_increments() {
     // Second set_token_policy — same token, different flags
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(DrwaPolicyRegistryProxy)
         .set_token_policy(
@@ -224,8 +224,8 @@ fn policy_registry_blackbox_version_increments() {
     assert_eq!(policy.token_policy_version, 2u64);
 }
 
-/// Deploy, owner proposes new governance, new governance accepts, then new
-/// governance successfully sets a token policy.
+/// Deploy, governance proposes new governance, new governance accepts, then
+/// new governance successfully sets a token policy.
 #[test]
 fn policy_registry_blackbox_governance_handoff() {
     let mut world = world();
@@ -244,10 +244,10 @@ fn policy_registry_blackbox_governance_handoff() {
         .new_address(SC_ADDRESS)
         .run();
 
-    // Owner proposes NEW_GOVERNANCE (setGovernance is #[only_owner])
+    // Active governance proposes NEW_GOVERNANCE.
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(DrwaPolicyRegistryProxy)
         .set_governance(NEW_GOVERNANCE)

@@ -7,8 +7,8 @@
 #![allow(dead_code)]
 #![allow(clippy::all)]
 
+use crate::{GsocReserveProof, ReserveProof};
 use multiversx_sc::proxy_imports::*;
-use crate::{ReserveProof, GsocReserveProof};
 
 pub struct ReserveProofRegistryProxy;
 
@@ -161,6 +161,34 @@ where
             .original_result()
     }
 
+    pub fn verify_holder_snapshot<
+        Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg1: ProxyArg<u64>,
+        Arg2: ProxyArg<u64>,
+        Arg3: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg4: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg5: ProxyArg<ManagedVec<Env::Api, ManagedBuffer<Env::Api>>>,
+    >(
+        self,
+        token_id: Arg0,
+        snapshot_block: Arg1,
+        leaf_index: Arg2,
+        holder_address: Arg3,
+        balance_scaled: Arg4,
+        merkle_proof: Arg5,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, bool> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("verifyHolderSnapshot")
+            .argument(&token_id)
+            .argument(&snapshot_block)
+            .argument(&leaf_index)
+            .argument(&holder_address)
+            .argument(&balance_scaled)
+            .argument(&merkle_proof)
+            .original_result()
+    }
+
     pub fn get_gsoc_reserve_proof<
         Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
         Arg1: ProxyArg<u64>,
@@ -187,6 +215,79 @@ where
             .payment(NotPayable)
             .raw_call("getLatestGsocReserveProof")
             .argument(&project_id)
+            .original_result()
+    }
+
+    pub fn get_canonical_gsoc_serial_inventory_hash<
+        Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
+    >(
+        self,
+        project_id: Arg0,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedBuffer<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("getCanonicalGsocSerialInventoryHash")
+            .argument(&project_id)
+            .original_result()
+    }
+
+    pub fn verify_gsoc_serial_inventory_hash<
+        Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg1: ProxyArg<ManagedBuffer<Env::Api>>,
+    >(
+        self,
+        project_id: Arg0,
+        expected_hash: Arg1,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, bool> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("verifyGsocSerialInventoryHash")
+            .argument(&project_id)
+            .argument(&expected_hash)
+            .original_result()
+    }
+
+    pub fn set_carbon_credit_addr<
+        Arg0: ProxyArg<ManagedAddress<Env::Api>>,
+    >(
+        self,
+        addr: Arg0,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ()> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("setCarbonCreditAddr")
+            .argument(&addr)
+            .original_result()
+    }
+
+    pub fn set_buffer_pool_addr<
+        Arg0: ProxyArg<ManagedAddress<Env::Api>>,
+    >(
+        self,
+        addr: Arg0,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ()> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("setBufferPoolAddr")
+            .argument(&addr)
+            .original_result()
+    }
+
+    pub fn carbon_credit_addr(
+        self,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedAddress<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("getCarbonCreditAddr")
+            .original_result()
+    }
+
+    pub fn buffer_pool_addr(
+        self,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedAddress<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("getBufferPoolAddr")
             .original_result()
     }
 

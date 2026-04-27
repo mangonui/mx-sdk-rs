@@ -15,6 +15,7 @@ pub struct State {
     policy_registry_address: Option<Bech32Address>,
     asset_manager_address: Option<Bech32Address>,
     attestation_address: Option<Bech32Address>,
+    auth_admin_address: Option<Bech32Address>,
 }
 
 impl State {
@@ -51,6 +52,11 @@ impl State {
         self.attestation_address = Some(address);
     }
 
+    /// Sets the drwa-auth-admin contract address
+    pub fn set_auth_admin_address(&mut self, address: Bech32Address) {
+        self.auth_admin_address = Some(address);
+    }
+
     /// Returns the identity registry contract address
     pub fn current_identity_registry_address(&self) -> &Bech32Address {
         self.identity_registry_address
@@ -77,6 +83,13 @@ impl State {
         self.attestation_address
             .as_ref()
             .expect("no known attestation contract, deploy first")
+    }
+
+    /// Returns the drwa-auth-admin contract address
+    pub fn current_auth_admin_address(&self) -> &Bech32Address {
+        self.auth_admin_address
+            .as_ref()
+            .expect("no known drwa-auth-admin contract, deploy first")
     }
 }
 

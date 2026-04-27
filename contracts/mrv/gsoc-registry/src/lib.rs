@@ -3,11 +3,16 @@
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
+use mrv_common::resolve_storage_version_upgrade;
+
+pub mod governance_proxy;
 pub mod gsoc_registry_proxy;
 
 /// Serial record stored after successful batch registration.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct GsocSerialBatchRecord<M: ManagedTypeApi> {
     pub project_id: ManagedBuffer<M>,
     pub vintage_year: u32,
@@ -20,7 +25,9 @@ pub struct GsocSerialBatchRecord<M: ManagedTypeApi> {
 
 /// Retirement record for a specific serial range.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct GsocRetirementRecord<M: ManagedTypeApi> {
     pub serial: ManagedBuffer<M>,
     pub beneficiary_name: ManagedBuffer<M>,
@@ -44,9 +51,23 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
         self.storage_version().set(1u32);
     }
 
+    #[endpoint(setGovernanceReadAddress)]
+    fn set_governance_read_address(&self, addr: ManagedAddress) {
+        self.require_governance_or_owner();
+        require!(!addr.is_zero(), "governance_read_address must not be zero");
+        self.governance_read_address().set(addr);
+    }
+
+    #[endpoint(clearGovernanceReadAddress)]
+    fn clear_governance_read_address(&self) {
+        self.require_governance_or_owner();
+        self.governance_read_address().clear();
+    }
+
     /// Reserves an ITMO serial before off-chain persistence and final registration.
     #[endpoint(reserveSerial)]
     fn reserve_serial(&self, itmo_serial: ManagedBuffer) -> bool {
+        self.require_not_paused();
         self.require_governance_or_owner();
         require!(!itmo_serial.is_empty(), "empty itmo_serial");
 
@@ -73,10 +94,14 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
         serial_end: ManagedBuffer,
         quantity: u64,
     ) {
+        self.require_not_paused();
         self.require_governance_or_owner();
         require!(!itmo_serial.is_empty(), "empty itmo_serial");
         require!(!project_id.is_empty(), "empty project_id");
-        require!((2020..=2100).contains(&vintage_year), "vintage_year out of range");
+        require!(
+            (2020..=2100).contains(&vintage_year),
+            "vintage_year out of range"
+        );
         require!(quantity > 0, "quantity must be positive");
 
         require!(
@@ -95,13 +120,24 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
             serial_start,
             serial_end,
             quantity,
-            registered_at: self.blockchain().get_block_timestamp_seconds().as_u64_seconds(),
+            registered_at: self
+                .blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds(),
             retired: false,
         };
 
         self.serial_records().insert(itmo_serial.clone(), record);
-        self.total_supply().update(|s| *s = s.checked_add(quantity).unwrap_or_else(|| sc_panic!("total_supply overflow")));
-        self.project_serial_count(&project_id).update(|c| *c = c.checked_add(1u64).unwrap_or_else(|| sc_panic!("project_serial_count overflow")));
+        self.total_supply().update(|s| {
+            *s = s
+                .checked_add(quantity)
+                .unwrap_or_else(|| sc_panic!("total_supply overflow"))
+        });
+        self.project_serial_count(&project_id).update(|c| {
+            *c = c
+                .checked_add(1u64)
+                .unwrap_or_else(|| sc_panic!("project_serial_count overflow"))
+        });
 
         self.reserved_serials().swap_remove(&itmo_serial);
 
@@ -111,6 +147,7 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
     /// Cancels a reserved serial that has not been finalized.
     #[endpoint(cancelReservation)]
     fn cancel_reservation(&self, itmo_serial: ManagedBuffer) {
+        self.require_not_paused();
         self.require_governance_or_owner();
         require!(!itmo_serial.is_empty(), "empty itmo_serial");
         require!(
@@ -134,7 +171,12 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
         beneficiary_address: ManagedAddress,
         burn_tx_hash: ManagedBuffer,
     ) {
-        self.require_governance_or_owner();
+        self.require_not_paused();
+        let caller = self.blockchain().get_caller();
+        require!(
+            self.verifiers().contains(&caller),
+            "VERIFIER_ONLY: retirement recording requires a registered verifier"
+        );
         require!(!itmo_serial.is_empty(), "empty itmo_serial");
         require!(
             self.serial_records().contains_key(&itmo_serial),
@@ -144,20 +186,30 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
         let record = self.serial_records().get(&itmo_serial).unwrap();
         require!(!record.retired, "SERIAL_ALREADY_RETIRED");
 
-        self.serial_records().entry(itmo_serial.clone()).and_modify(|r| {
-            r.retired = true;
-        });
+        self.serial_records()
+            .entry(itmo_serial.clone())
+            .and_modify(|r| {
+                r.retired = true;
+            });
 
         let retirement = GsocRetirementRecord {
             serial: itmo_serial.clone(),
             beneficiary_name: beneficiary_name.clone(),
             beneficiary_address: beneficiary_address.clone(),
-            retired_at: self.blockchain().get_block_timestamp_seconds().as_u64_seconds(),
+            retired_at: self
+                .blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds(),
             burn_tx_hash,
         };
 
-        self.retirement_records().insert(itmo_serial.clone(), retirement);
-        self.total_retired().update(|r| *r = r.checked_add(record.quantity).unwrap_or_else(|| sc_panic!("total_retired overflow")));
+        self.retirement_records()
+            .insert(itmo_serial.clone(), retirement);
+        self.total_retired().update(|r| {
+            *r = r
+                .checked_add(record.quantity)
+                .unwrap_or_else(|| sc_panic!("total_retired overflow"))
+        });
 
         self.serial_retired_event(&itmo_serial, &beneficiary_name);
     }
@@ -234,6 +286,10 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
     #[storage_mapper("projectSerialCount")]
     fn project_serial_count(&self, project_id: &ManagedBuffer) -> SingleValueMapper<u64>;
 
+    #[view(getGovernanceReadAddress)]
+    #[storage_mapper("governanceReadAddress")]
+    fn governance_read_address(&self) -> SingleValueMapper<ManagedAddress>;
+
     #[event("serialReserved")]
     fn serial_reserved_event(&self, #[indexed] itmo_serial: &ManagedBuffer);
 
@@ -258,6 +314,7 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
     /// Registers a verifier address.
     #[endpoint(addVerifier)]
     fn add_verifier(&self, verifier: ManagedAddress) {
+        self.require_not_paused();
         self.require_governance_or_owner();
         require!(!verifier.is_zero(), "verifier must not be zero");
         self.verifiers().insert(verifier.clone());
@@ -268,6 +325,7 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
     /// single-key-compromise risk.
     #[endpoint(removeVerifier)]
     fn remove_verifier(&self, verifier: ManagedAddress) {
+        self.require_not_paused();
         let caller = self.blockchain().get_caller();
         require!(
             !self.governance().is_empty() && caller == self.governance().get(),
@@ -300,11 +358,44 @@ pub trait GsocRegistry: mrv_common::MrvGovernanceModule {
     #[storage_mapper("storageVersion")]
     fn storage_version(&self) -> SingleValueMapper<u32>;
 
+    fn require_not_paused(&self) {
+        if self.governance_read_address().is_empty() {
+            let authority = if !self.governance().is_empty() {
+                self.governance().get()
+            } else {
+                self.blockchain().get_owner_address()
+            };
+            require!(
+                !self.blockchain().is_smart_contract(&authority),
+                "MRV_GOVERNANCE_READ_NOT_CONFIGURED"
+            );
+            return;
+        }
+
+        use governance_proxy::GovernanceProxy;
+
+        let governance_read_address = self.governance_read_address().get();
+        let gas_for_query = self.blockchain().get_gas_left() / 16;
+
+        let paused: bool = self
+            .tx()
+            .to(&governance_read_address)
+            .gas(gas_for_query)
+            .typed(GovernanceProxy)
+            .get_paused()
+            .returns(ReturnsResult)
+            .sync_call_readonly();
+
+        require!(!paused, "MRV_GOVERNANCE_PAUSED");
+    }
+
     #[upgrade]
     fn upgrade(&self) {
-        let current = self.storage_version().get();
-        if current < 1u32 {
-            self.storage_version().set(1u32);
+        let stored = self.storage_version().get();
+        let target = resolve_storage_version_upgrade(stored, 1u32, 1u32)
+            .unwrap_or_else(|message| sc_panic!(message));
+        if stored != target {
+            self.storage_version().set(target);
         }
     }
 }

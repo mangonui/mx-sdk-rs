@@ -138,7 +138,10 @@ fn attestation_blackbox_revoke() {
         .attestation(TOKEN_ID, SUBJECT.to_managed_address())
         .returns(ReturnsResult)
         .run();
-    assert!(record.approved, "attestation should be approved before revocation");
+    assert!(
+        record.approved,
+        "attestation should be approved before revocation"
+    );
 
     // Revoke the attestation
     world
@@ -226,5 +229,8 @@ fn attestation_blackbox_auditor_rotation() {
         ManagedBuffer::<StaticApi>::from("hash-new"),
         "evidence_hash should reflect the new auditor's attestation"
     );
-    assert!(record.approved, "attestation from new auditor should be approved");
+    assert!(
+        record.approved,
+        "attestation from new auditor should be approved"
+    );
 }

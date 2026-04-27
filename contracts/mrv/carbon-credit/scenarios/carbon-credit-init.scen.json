@@ -52,7 +52,7 @@
             "step": "scCall",
             "id": "register-ime-record",
             "tx": {
-                "from": "address:owner",
+                "from": "address:governance",
                 "to": "sc:mrv_carbon_credit",
                 "function": "registerImeRecord",
                 "arguments": [
@@ -79,7 +79,7 @@
             "step": "scCall",
             "id": "register-committed-bundle",
             "tx": {
-                "from": "address:owner",
+                "from": "address:governance",
                 "to": "sc:mrv_carbon_credit",
                 "function": "registerCommittedBundle",
                 "arguments": [

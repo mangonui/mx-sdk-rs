@@ -1,19 +1,26 @@
-use mrv_income_distribution::IncomeDistribution;
 use mrv_common::MrvGovernanceModule;
-use multiversx_sc::types::{TokenIdentifier, ManagedBuffer};
+use mrv_governance::MrvGovernance;
+use mrv_income_distribution::IncomeDistribution;
+use multiversx_sc::types::{ManagedBuffer, TokenIdentifier};
 use multiversx_sc_scenario::imports::*;
 
 const OWNER: TestAddress = TestAddress::new("owner");
 const GOVERNANCE: TestAddress = TestAddress::new("governance");
 const SC_ADDRESS: TestSCAddress = TestSCAddress::new("mrv-income-distribution");
+const GOVERNANCE_SC: TestSCAddress = TestSCAddress::new("mrv-governance");
 const CODE_PATH: MxscPath = MxscPath::new("mxsc:output/mrv-income-distribution.mxsc.json");
+const GOVERNANCE_CODE: MxscPath =
+    MxscPath::new("mxsc:../../governance/output/mrv-governance.mxsc.json");
 const COME_TOKEN: TestTokenIdentifier = TestTokenIdentifier::new("COME-abcdef");
 const WRONG_TOKEN: TestTokenIdentifier = TestTokenIdentifier::new("FAKE-123456");
+const SIGNER_ONE: TestAddress = TestAddress::new("signer-one");
+const SIGNER_TWO: TestAddress = TestAddress::new("signer-two");
 
 fn world() -> ScenarioWorld {
     let mut world = ScenarioWorld::new().executor_config(ExecutorConfig::full_suite());
     world.set_current_dir_from_workspace("contracts/mrv/income-distribution");
     world.register_contract(CODE_PATH, mrv_income_distribution::ContractBuilder);
+    world.register_contract(GOVERNANCE_CODE, mrv_governance::ContractBuilder);
     world
 }
 
@@ -24,6 +31,7 @@ fn deploy_income_distribution(world: &mut ScenarioWorld) {
         .nonce(1)
         .balance(1_000_000u64)
         .esdt_balance(COME_TOKEN, BigUint::from(1_000_000u64))
+        .esdt_nft_balance(COME_TOKEN, 1u64, BigUint::from(10_000u64), ())
         .esdt_balance(WRONG_TOKEN, BigUint::from(500_000u64));
 
     world
@@ -38,6 +46,40 @@ fn deploy_income_distribution(world: &mut ScenarioWorld) {
                 TokenIdentifier::from("COME-abcdef"),
             );
         });
+}
+
+fn claim_leaf_hash(
+    sc: &mrv_income_distribution::ContractObj<DebugApi>,
+    dist_id: &[u8],
+    holder: TestAddress,
+    claim_amount: u64,
+    total_amount: u64,
+) -> [u8; 32] {
+    let mut leaf_preimage = ManagedBuffer::from(b"MRV_YIELD_CLAIM_LEAF_V2");
+    append_len_prefixed(&mut leaf_preimage, &ManagedBuffer::from(dist_id));
+    append_len_prefixed(
+        &mut leaf_preimage,
+        holder.to_managed_address().as_managed_buffer(),
+    );
+    append_len_prefixed(
+        &mut leaf_preimage,
+        &BigUint::from(claim_amount).to_bytes_be_buffer(),
+    );
+    append_len_prefixed(
+        &mut leaf_preimage,
+        &BigUint::from(total_amount).to_bytes_be_buffer(),
+    );
+    let hash = sc.crypto().keccak256(&leaf_preimage);
+    let hash_bytes = hash.as_managed_buffer().to_boxed_bytes();
+    let mut root = [0u8; 32];
+    root.copy_from_slice(hash_bytes.as_slice());
+    root
+}
+
+fn append_len_prefixed(dest: &mut ManagedBuffer<DebugApi>, value: &ManagedBuffer<DebugApi>) {
+    let len = value.len() as u32;
+    dest.append_bytes(&len.to_be_bytes());
+    dest.append(value);
 }
 
 /// Helper: deploys contract, funds a distribution with `dist_id`, returns the
@@ -57,15 +99,8 @@ fn deploy_and_fund_with_claim(
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            let mut leaf_preimage = ManagedBuffer::new();
-            leaf_preimage.append(&ManagedBuffer::from(dist_id));
-            leaf_preimage.append(holder.to_managed_address().as_managed_buffer());
-            leaf_preimage.append(&BigUint::from(claim_amount).to_bytes_be_buffer());
-            let hash = sc.crypto().keccak256(&leaf_preimage);
-            let hash_bytes = hash.as_managed_buffer().to_boxed_bytes();
-            let mut root = [0u8; 32];
-            root.copy_from_slice(hash_bytes.as_slice());
-            *merkle_root_cell.borrow_mut() = root;
+            *merkle_root_cell.borrow_mut() =
+                claim_leaf_hash(&sc, dist_id, holder, claim_amount, fund_amount);
         });
 
     let merkle_root = *merkle_root_cell.borrow();
@@ -138,10 +173,7 @@ fn income_distribution_rejects_zero_governance_rs() {
         .new_address(SC_ADDRESS)
         .returns(ExpectError(4u64, "governance must not be zero"))
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            sc.init(
-                ManagedAddress::zero(),
-                TokenIdentifier::from("COME-abcdef"),
-            );
+            sc.init(ManagedAddress::zero(), TokenIdentifier::from("COME-abcdef"));
         });
 }
 
@@ -179,6 +211,11 @@ fn income_distribution_fund_distribution_rs() {
             assert_eq!(dist.total_claimed_scaled, BigUint::zero());
             assert_eq!(dist.expiry_epoch, 6_000u64);
             assert!(!dist.reclaimed);
+            assert_eq!(
+                sc.distribution_escrow(&ManagedBuffer::from(b"dist-001"))
+                    .get(),
+                BigUint::from(50_000u64)
+            );
         });
 }
 
@@ -207,13 +244,12 @@ fn income_distribution_reclaim_expired_rs() {
     // Advance epoch past expiry
     world.current_block().block_epoch(6_001u64);
 
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.reclaim_expired(ManagedBuffer::from(b"dist-002"));
-        });
+        },
+    );
 
     world
         .query()
@@ -224,6 +260,96 @@ fn income_distribution_reclaim_expired_rs() {
                 .into_option()
                 .unwrap();
             assert!(dist.reclaimed);
+            assert_eq!(
+                sc.distribution_escrow(&ManagedBuffer::from(b"dist-002"))
+                    .get(),
+                BigUint::zero()
+            );
+        });
+}
+
+#[test]
+fn income_distribution_claim_uses_distribution_escrow_not_global_balance_rs() {
+    let mut world = world();
+    let holder: TestAddress = TestAddress::new("holder-escrow");
+
+    deploy_income_distribution(&mut world);
+    world.account(holder).nonce(1).balance(0u64);
+
+    let claim_amount: u64 = 1_000;
+    let mut dist_a_root = [0u8; 32];
+    let mut dist_b_root = [0u8; 32];
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            dist_a_root = claim_leaf_hash(&sc, b"dist-escrow-a", holder, claim_amount, 1_000);
+            dist_b_root = claim_leaf_hash(&sc, b"dist-escrow-b", holder, claim_amount, 1_000);
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .payment(Payment::try_new(COME_TOKEN, 0, 1_000u64).unwrap())
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.fund_distribution(
+                ManagedBuffer::from(b"dist-escrow-a"),
+                ManagedBuffer::from(&dist_a_root[..]),
+                100u64,
+                ManagedBuffer::from(b"bafyescrowa"),
+                6_000u64,
+            );
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .payment(Payment::try_new(COME_TOKEN, 0, 1_000u64).unwrap())
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.fund_distribution(
+                ManagedBuffer::from(b"dist-escrow-b"),
+                ManagedBuffer::from(&dist_b_root[..]),
+                100u64,
+                ManagedBuffer::from(b"bafyescrowb"),
+                6_000u64,
+            );
+        });
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
+            sc.distribution_escrow(&ManagedBuffer::from(b"dist-escrow-a"))
+                .clear();
+        },
+    );
+
+    world
+        .tx()
+        .from(holder)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(
+            4u64,
+            "INSUFFICIENT_DISTRIBUTION_ESCROW: distribution does not hold enough COME for this claim",
+        ))
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.claim_yield(
+                ManagedBuffer::from(b"dist-escrow-a"),
+                BigUint::from(claim_amount),
+                ManagedVec::new(),
+            );
+        });
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            assert_eq!(
+                sc.distribution_escrow(&ManagedBuffer::from(b"dist-escrow-b"))
+                    .get(),
+                BigUint::from(1_000u64)
+            );
         });
 }
 
@@ -287,6 +413,30 @@ fn income_distribution_fund_with_wrong_token_fails_rs() {
 }
 
 #[test]
+fn income_distribution_fund_with_nonzero_nonce_fails_rs() {
+    let mut world = world();
+    deploy_income_distribution(&mut world);
+
+    let merkle_root: [u8; 32] = [0xDEu8; 32];
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .payment(Payment::try_new(COME_TOKEN, 1, 10_000u64).unwrap())
+        .returns(ExpectError(4u64, "FUNGIBLE_ONLY: token nonce must be 0"))
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.fund_distribution(
+                ManagedBuffer::from(b"dist-nonce-001"),
+                ManagedBuffer::from(&merkle_root[..]),
+                100u64,
+                ManagedBuffer::from(b"bafymanifest-nonce"),
+                6_000u64,
+            );
+        });
+}
+
+#[test]
 fn income_distribution_claim_with_valid_proof_rs() {
     use std::cell::RefCell;
 
@@ -317,7 +467,10 @@ fn income_distribution_claim_with_valid_proof_rs() {
 
     // Step 1: Compute the Merkle leaf (single-leaf tree, leaf == root) inside a
     // whitebox query so we get the exact keccak256 the contract will produce.
-    // leaf = keccak256(distribution_id || holder_address || amount_be)
+    // leaf = keccak256(domain || len(distribution_id) || distribution_id
+    //                  || len(holder_address) || holder_address
+    //                  || len(amount_be) || amount_be
+    //                  || len(total_amount_be) || total_amount_be)
     let merkle_root_cell: RefCell<[u8; 32]> = RefCell::new([0u8; 32]);
     let claim_amount: u64 = 25_000;
 
@@ -325,15 +478,8 @@ fn income_distribution_claim_with_valid_proof_rs() {
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            let mut leaf_preimage = ManagedBuffer::new();
-            leaf_preimage.append(&ManagedBuffer::from(b"dist-claim-001"));
-            leaf_preimage.append(holder.to_managed_address().as_managed_buffer());
-            leaf_preimage.append(&BigUint::from(claim_amount).to_bytes_be_buffer());
-            let hash = sc.crypto().keccak256(&leaf_preimage);
-            let hash_bytes = hash.as_managed_buffer().to_boxed_bytes();
-            let mut root = [0u8; 32];
-            root.copy_from_slice(hash_bytes.as_slice());
-            *merkle_root_cell.borrow_mut() = root;
+            *merkle_root_cell.borrow_mut() =
+                claim_leaf_hash(&sc, b"dist-claim-001", holder, claim_amount, 50_000);
         });
 
     let merkle_root = *merkle_root_cell.borrow();
@@ -561,7 +707,10 @@ fn fund_distribution_duplicate_id_fails() {
 #[test]
 fn fund_distribution_zero_amount_fails() {
     let result = Payment::<StaticApi>::try_new(COME_TOKEN, 0, 0u64);
-    assert!(result.is_err(), "framework must reject zero-amount ESDT payment");
+    assert!(
+        result.is_err(),
+        "framework must reject zero-amount ESDT payment"
+    );
 }
 
 // T8: init_invalid_token_id_fails — invalid ESDT identifier
@@ -616,23 +765,17 @@ fn claim_yield_paused_fails() {
         });
 
     let claim_amount: u64 = 10_000;
-    let merkle_root = deploy_and_fund_with_claim(
-        &mut world,
-        b"dist-paused",
-        holder,
-        claim_amount,
-        50_000u64,
-    );
+    let merkle_root =
+        deploy_and_fund_with_claim(&mut world, b"dist-paused", holder, claim_amount, 50_000u64);
     let _ = merkle_root;
 
     // Pause the distribution
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.pause_distribution(ManagedBuffer::from(b"dist-paused"));
-        });
+        },
+    );
 
     // Attempt to claim — should fail
     world
@@ -704,13 +847,8 @@ fn claim_yield_expired_fails() {
         });
 
     let claim_amount: u64 = 10_000;
-    let _merkle_root = deploy_and_fund_with_claim(
-        &mut world,
-        b"dist-expired",
-        holder,
-        claim_amount,
-        50_000u64,
-    );
+    let _merkle_root =
+        deploy_and_fund_with_claim(&mut world, b"dist-expired", holder, claim_amount, 50_000u64);
 
     // Advance past expiry
     world.current_block().block_epoch(6_001u64);
@@ -769,13 +907,12 @@ fn claim_yield_reclaimed_fails() {
     // Expire and reclaim
     world.current_block().block_epoch(6_001u64);
 
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.reclaim_expired(ManagedBuffer::from(b"dist-reclaimed"));
-        });
+        },
+    );
 
     // Reset epoch so it's not expired (reclaimed check comes after expiry check)
     world.current_block().block_epoch(5_000u64);
@@ -831,15 +968,8 @@ fn claim_yield_already_claimed_fails() {
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            let mut leaf_preimage = ManagedBuffer::new();
-            leaf_preimage.append(&ManagedBuffer::from(b"dist-double-claim"));
-            leaf_preimage.append(holder.to_managed_address().as_managed_buffer());
-            leaf_preimage.append(&BigUint::from(claim_amount).to_bytes_be_buffer());
-            let hash = sc.crypto().keccak256(&leaf_preimage);
-            let hash_bytes = hash.as_managed_buffer().to_boxed_bytes();
-            let mut root = [0u8; 32];
-            root.copy_from_slice(hash_bytes.as_slice());
-            *merkle_root_cell.borrow_mut() = root;
+            *merkle_root_cell.borrow_mut() =
+                claim_leaf_hash(&sc, b"dist-double-claim", holder, claim_amount, 50_000);
         });
 
     let merkle_root = *merkle_root_cell.borrow();
@@ -988,15 +1118,8 @@ fn claim_yield_exceeds_funded_fails() {
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            let mut leaf_preimage = ManagedBuffer::new();
-            leaf_preimage.append(&ManagedBuffer::from(b"dist-exceed"));
-            leaf_preimage.append(holder.to_managed_address().as_managed_buffer());
-            leaf_preimage.append(&BigUint::from(claim_amount).to_bytes_be_buffer());
-            let hash = sc.crypto().keccak256(&leaf_preimage);
-            let hash_bytes = hash.as_managed_buffer().to_boxed_bytes();
-            let mut root = [0u8; 32];
-            root.copy_from_slice(hash_bytes.as_slice());
-            *merkle_root_cell.borrow_mut() = root;
+            *merkle_root_cell.borrow_mut() =
+                claim_leaf_hash(&sc, b"dist-exceed", holder, claim_amount, fund_amount);
         });
 
     let merkle_root = *merkle_root_cell.borrow();
@@ -1028,6 +1151,83 @@ fn claim_yield_exceeds_funded_fails() {
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
             sc.claim_yield(
                 ManagedBuffer::from(b"dist-exceed"),
+                BigUint::from(claim_amount),
+                ManagedVec::new(),
+            );
+        });
+}
+
+#[test]
+fn claim_yield_rejects_root_bound_to_different_distribution_total() {
+    use std::cell::RefCell;
+
+    let mut world = world();
+    let holder: TestAddress = TestAddress::new("holder-total-bound");
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world
+        .account(GOVERNANCE)
+        .nonce(1)
+        .balance(1_000_000u64)
+        .esdt_balance(COME_TOKEN, BigUint::from(1_000_000u64));
+    world.account(holder).nonce(1).balance(0u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.init(
+                GOVERNANCE.to_managed_address(),
+                TokenIdentifier::from("COME-abcdef"),
+            );
+        });
+
+    let claim_amount: u64 = 1_000;
+    let funded_amount: u64 = 5_000;
+    let tree_declared_total: u64 = 10_000;
+    let merkle_root_cell: RefCell<[u8; 32]> = RefCell::new([0u8; 32]);
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            *merkle_root_cell.borrow_mut() = claim_leaf_hash(
+                &sc,
+                b"dist-total-bound",
+                holder,
+                claim_amount,
+                tree_declared_total,
+            );
+        });
+
+    let merkle_root = *merkle_root_cell.borrow();
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .payment(Payment::try_new(COME_TOKEN, 0, funded_amount).unwrap())
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.fund_distribution(
+                ManagedBuffer::from(b"dist-total-bound"),
+                ManagedBuffer::from(&merkle_root[..]),
+                100u64,
+                ManagedBuffer::from(b"bafytotalbound"),
+                6_000u64,
+            );
+        });
+
+    world
+        .tx()
+        .from(holder)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "INVALID_MERKLE_PROOF"))
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.claim_yield(
+                ManagedBuffer::from(b"dist-total-bound"),
                 BigUint::from(claim_amount),
                 ManagedVec::new(),
             );
@@ -1072,20 +1272,22 @@ fn pause_distribution_and_unpause() {
     );
 
     // Pause
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.pause_distribution(ManagedBuffer::from(b"dist-pause-test"));
-        });
+        },
+    );
 
     // Verify paused
     world
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            assert!(sc.distribution_paused(&ManagedBuffer::from(b"dist-pause-test")).get());
+            assert!(
+                sc.distribution_paused(&ManagedBuffer::from(b"dist-pause-test"))
+                    .get()
+            );
         });
 
     // Claim while paused fails
@@ -1106,20 +1308,22 @@ fn pause_distribution_and_unpause() {
         });
 
     // Unpause
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.unpause_distribution(ManagedBuffer::from(b"dist-pause-test"));
-        });
+        },
+    );
 
     // Verify unpaused
     world
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            assert!(!sc.distribution_paused(&ManagedBuffer::from(b"dist-pause-test")).get());
+            assert!(
+                !sc.distribution_paused(&ManagedBuffer::from(b"dist-pause-test"))
+                    .get()
+            );
         });
 
     // Claim after unpause succeeds (with valid proof)
@@ -1180,13 +1384,12 @@ fn reclaim_expired_already_reclaimed_fails() {
     world.current_block().block_epoch(6_001u64);
 
     // First reclaim succeeds
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.reclaim_expired(ManagedBuffer::from(b"dist-reclaim-twice"));
-        });
+        },
+    );
 
     // Second reclaim fails
     world
@@ -1229,14 +1432,13 @@ fn recover_shortfall_happy_path() {
     // whitebox tests cannot do directly. Setting storage directly is the canonical
     // whitebox approach.
     let shortfall_amount: u64 = 15_000;
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.reclaim_shortfall(&ManagedBuffer::from(b"dist-shortfall"))
                 .set(BigUint::from(shortfall_amount));
-        });
+        },
+    );
 
     // Recover the full shortfall
     world
@@ -1321,14 +1523,13 @@ fn recover_shortfall_wrong_token_fails() {
         });
 
     // Set shortfall via storage
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.reclaim_shortfall(&ManagedBuffer::from(b"dist-wrong-recover"))
                 .set(BigUint::from(5_000u64));
-        });
+        },
+    );
 
     world
         .tx()
@@ -1365,19 +1566,21 @@ fn recover_shortfall_zero_amount_fails() {
         });
 
     // Set shortfall via storage
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.reclaim_shortfall(&ManagedBuffer::from(b"dist-zero-recover"))
                 .set(BigUint::from(5_000u64));
-        });
+        },
+    );
 
     // The MultiversX framework rejects zero-amount ESDT payments at the
     // Payment::try_new level, so a zero payment can never reach the contract.
     let result = Payment::<StaticApi>::try_new(COME_TOKEN, 0, 0u64);
-    assert!(result.is_err(), "framework must reject zero-amount ESDT payment");
+    assert!(
+        result.is_err(),
+        "framework must reject zero-amount ESDT payment"
+    );
 }
 
 // T23: recover_shortfall_exceeds_shortfall_fails
@@ -1404,14 +1607,13 @@ fn recover_shortfall_exceeds_shortfall_fails() {
         });
 
     // Set shortfall = 3_000 via storage
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.reclaim_shortfall(&ManagedBuffer::from(b"dist-exceed-recover"))
                 .set(BigUint::from(3_000u64));
-        });
+        },
+    );
 
     // Try to recover 5_000 against shortfall of 3_000
     world
@@ -1465,15 +1667,8 @@ fn is_claimed_true_after_claim() {
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            let mut leaf_preimage = ManagedBuffer::new();
-            leaf_preimage.append(&ManagedBuffer::from(b"dist-is-claimed"));
-            leaf_preimage.append(holder.to_managed_address().as_managed_buffer());
-            leaf_preimage.append(&BigUint::from(claim_amount).to_bytes_be_buffer());
-            let hash = sc.crypto().keccak256(&leaf_preimage);
-            let hash_bytes = hash.as_managed_buffer().to_boxed_bytes();
-            let mut root = [0u8; 32];
-            root.copy_from_slice(hash_bytes.as_slice());
-            *merkle_root_cell.borrow_mut() = root;
+            *merkle_root_cell.borrow_mut() =
+                claim_leaf_hash(&sc, b"dist-is-claimed", holder, claim_amount, 50_000);
         });
 
     let merkle_root = *merkle_root_cell.borrow();
@@ -1570,9 +1765,32 @@ fn upgrade_works() {
         });
 }
 
-// T26: governance_set_accept_revoke — test inherited governance endpoints
 #[test]
-fn governance_set_accept_revoke() {
+fn upgrade_rejects_future_storage_version() {
+    let mut world = world();
+    deploy_income_distribution(&mut world);
+
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.storage_version().set(99u32);
+        });
+
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "unsupported future storage version"))
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.upgrade();
+        });
+}
+
+// T26: governance_rotation_is_irreversible — test inherited governance endpoints
+#[test]
+fn governance_rotation_is_irreversible() {
     let mut world = world();
 
     let new_gov: TestAddress = TestAddress::new("new_gov");
@@ -1594,14 +1812,13 @@ fn governance_set_accept_revoke() {
             );
         });
 
-    // Owner proposes new governance
-    world
-        .tx()
-        .from(OWNER)
-        .to(SC_ADDRESS)
-        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+    // Current governance proposes new governance
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
             sc.set_governance(new_gov.to_managed_address());
-        });
+        },
+    );
 
     // Verify pending governance is set
     world
@@ -1630,21 +1847,22 @@ fn governance_set_accept_revoke() {
             assert_eq!(sc.governance().get(), new_gov.to_managed_address());
         });
 
-    // Owner revokes governance
+    // Owner can no longer revoke active governance back to owner-only.
     world
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "active governance cannot be revoked"))
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
             sc.revoke_governance();
         });
 
-    // Verify governance is cleared
+    // Verify governance remains active after the rejected revoke attempt.
     world
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_income_distribution::contract_obj, |sc| {
-            assert!(sc.governance().is_empty());
+            assert_eq!(sc.governance().get(), new_gov.to_managed_address());
         });
 }
 
@@ -1722,6 +1940,103 @@ fn fund_distribution_unauthorized_fails() {
                 100u64,
                 ManagedBuffer::from(b"bafymanifest"),
                 6_000u64,
+            );
+        });
+}
+
+#[test]
+fn income_distribution_governance_pause_blocks_funding_and_claims_rs() {
+    let mut world = world();
+    deploy_income_distribution(&mut world);
+
+    let holder: TestAddress = TestAddress::new("holder-paused");
+    world.account(holder).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_ONE).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_TWO).nonce(1).balance(1_000_000u64);
+
+    deploy_and_fund_with_claim(&mut world, b"dist-paused-claim", holder, 500u64, 500u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(GOVERNANCE_CODE)
+        .new_address(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            let mut signers = MultiValueEncoded::new();
+            signers.push(SIGNER_ONE.to_managed_address());
+            signers.push(SIGNER_TWO.to_managed_address());
+            sc.init(2, 3600, signers);
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.propose_emergency_pause(ManagedBuffer::from(b"pause-income-001"), true);
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"pause-income-001"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"pause-income-001"));
+        });
+
+    world.current_block().block_timestamp_seconds(3601u64);
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"pause-income-001"));
+        });
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        mrv_income_distribution::contract_obj,
+        |sc| {
+            sc.set_governance_read_address(GOVERNANCE_SC.to_managed_address());
+        },
+    );
+
+    let paused_root: [u8; 32] = [0xABu8; 32];
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .payment(Payment::try_new(COME_TOKEN, 0, 10_000u64).unwrap())
+        .returns(ExpectError(4u64, "MRV_GOVERNANCE_PAUSED"))
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.fund_distribution(
+                ManagedBuffer::from(b"dist-paused-fund"),
+                ManagedBuffer::from(&paused_root[..]),
+                100u64,
+                ManagedBuffer::from(b"bafymanifest-paused"),
+                6_000u64,
+            );
+        });
+
+    world
+        .tx()
+        .from(holder)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "MRV_GOVERNANCE_PAUSED"))
+        .whitebox(mrv_income_distribution::contract_obj, |sc| {
+            sc.claim_yield(
+                ManagedBuffer::from(b"dist-paused-claim"),
+                BigUint::from(500u64),
+                ManagedVec::new(),
             );
         });
 }

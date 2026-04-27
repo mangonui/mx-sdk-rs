@@ -75,9 +75,12 @@ fn mrv_governance_executes_emergency_pause_proposal() {
             sc.execute_proposal(ManagedBuffer::from(b"pause-001"));
         });
 
-    world.query().to(SC_ADDRESS).whitebox(mrv_governance::contract_obj, |sc| {
-        assert!(sc.paused().get());
-    });
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            assert!(sc.paused().get());
+        });
 }
 
 #[test]
@@ -141,14 +144,17 @@ fn mrv_governance_tracks_verifier_accreditation_state() {
             sc.execute_proposal(ManagedBuffer::from(b"verifier-001"));
         });
 
-    world.query().to(SC_ADDRESS).whitebox(mrv_governance::contract_obj, |sc| {
-        let accreditation = sc
-            .get_verifier_accreditation(VERIFIER.to_managed_address())
-            .into_option()
-            .unwrap();
-        assert!(accreditation.approved);
-        assert_eq!(accreditation.role.to_boxed_bytes().as_slice(), b"vvb");
-    });
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            let accreditation = sc
+                .get_verifier_accreditation(VERIFIER.to_managed_address())
+                .into_option()
+                .unwrap();
+            assert!(accreditation.approved);
+            assert_eq!(accreditation.role.to_boxed_bytes().as_slice(), b"vvb");
+        });
 }
 
 const FARMER: TestAddress = TestAddress::new("farmer");
@@ -268,7 +274,10 @@ fn mrv_governance_proposal_expiry_rs() {
         .tx()
         .from(SIGNER_ONE)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "PROPOSAL_EXPIRED: must be executed within 30 days of timelock expiry"))
+        .returns(ExpectError(
+            4u64,
+            "PROPOSAL_EXPIRED: must be executed within 30 days of timelock expiry",
+        ))
         .whitebox(mrv_governance::contract_obj, |sc| {
             sc.execute_proposal(ManagedBuffer::from(b"expiry-001"));
         });
@@ -306,10 +315,32 @@ fn mrv_governance_remove_signer_rs() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(SIGNER_ONE)
         .to(SC_ADDRESS)
         .whitebox(mrv_governance::contract_obj, |sc| {
-            sc.remove_signer(SIGNER_THREE.to_managed_address());
+            sc.propose_remove_signer(
+                ManagedBuffer::from(b"remove-signer-001"),
+                SIGNER_THREE.to_managed_address(),
+            );
+            sc.approve_proposal(ManagedBuffer::from(b"remove-signer-001"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"remove-signer-001"));
+        });
+
+    world.current_block().block_timestamp_seconds(3601u64);
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"remove-signer-001"));
         });
 
     world
@@ -319,6 +350,86 @@ fn mrv_governance_remove_signer_rs() {
             assert!(!sc.is_signer(SIGNER_THREE.to_managed_address()));
             assert!(sc.is_signer(SIGNER_ONE.to_managed_address()));
             assert!(sc.is_signer(SIGNER_TWO.to_managed_address()));
+        });
+}
+
+#[test]
+fn mrv_governance_removed_signer_approval_no_longer_counts_rs() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_ONE).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_TWO).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_THREE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            let mut signers = MultiValueEncoded::new();
+            signers.push(SIGNER_ONE.to_managed_address());
+            signers.push(SIGNER_TWO.to_managed_address());
+            signers.push(SIGNER_THREE.to_managed_address());
+            sc.init(2, 3600, signers);
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.propose_emergency_pause(ManagedBuffer::from(b"stale-pause"), true);
+            sc.approve_proposal(ManagedBuffer::from(b"stale-pause"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_THREE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"stale-pause"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.propose_remove_signer(
+                ManagedBuffer::from(b"remove-stale-signer"),
+                SIGNER_THREE.to_managed_address(),
+            );
+            sc.approve_proposal(ManagedBuffer::from(b"remove-stale-signer"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"remove-stale-signer"));
+        });
+
+    world.current_block().block_timestamp_seconds(3601u64);
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"remove-stale-signer"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "insufficient approvals"))
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"stale-pause"));
         });
 }
 
@@ -401,5 +512,108 @@ fn mrv_governance_propose_badge_issuance_rs() {
                 badge.to_boxed_bytes().as_slice(),
                 b"sha256:badge-metadata-hash"
             );
+        });
+}
+
+#[test]
+fn mrv_governance_removes_gsoc_verifier_via_timelocked_proposal_rs() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_ONE).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_TWO).nonce(1).balance(1_000_000u64);
+    world.account(VERIFIER).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            let mut signers = MultiValueEncoded::new();
+            signers.push(SIGNER_ONE.to_managed_address());
+            signers.push(SIGNER_TWO.to_managed_address());
+            sc.init(2, 3600, signers);
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.propose_gsoc_verifier(
+                VERIFIER.to_managed_address(),
+                ManagedBuffer::from(b"ipfs://credentials"),
+                ManagedBuffer::from(b"KE"),
+            );
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_gsoc_verifier_proposal(1);
+        });
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_gsoc_verifier_proposal(1);
+        });
+
+    world.current_block().block_timestamp_seconds(3601u64);
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_gsoc_verifier_proposal(1);
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.propose_remove_gsoc_verifier(
+                ManagedBuffer::from(b"remove-gsoc-001"),
+                VERIFIER.to_managed_address(),
+            );
+            sc.approve_proposal(ManagedBuffer::from(b"remove-gsoc-001"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"remove-gsoc-001"));
+        });
+
+    world.current_block().block_timestamp_seconds(7202u64);
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"remove-gsoc-001"));
+        });
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            assert!(!sc.is_gsoc_verifier_approved(VERIFIER.to_managed_address()));
+            assert_eq!(
+                sc.get_gsoc_verifier_revoked_at(VERIFIER.to_managed_address()),
+                7202u64
+            );
+            assert!(sc.is_gsoc_verifier_review_required(VERIFIER.to_managed_address()));
         });
 }

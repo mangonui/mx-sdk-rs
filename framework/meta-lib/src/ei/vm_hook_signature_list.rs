@@ -138,6 +138,8 @@ pub const VM_HOOK_SIGNATURES: &[VmHookSignature] = &[
     VmHookSignature::new("managedGetCodeMetadata", &[ValType::I32, ValType::I32], None),
     VmHookSignature::new("managedGetCodeHash", &[ValType::I32, ValType::I32], None),
     VmHookSignature::new("managedIsBuiltinFunction", &[ValType::I32], Some(ValType::I32)),
+    VmHookSignature::new("managedDRWASyncMirror", &[ValType::I32], Some(ValType::I32)),
+    VmHookSignature::new("managedDRWANativeGovernanceQuery", &[ValType::I32, ValType::I32, ValType::I32], Some(ValType::I32)),
     VmHookSignature::new("bigFloatNewFromParts", &[ValType::I32, ValType::I32, ValType::I32], Some(ValType::I32)),
     VmHookSignature::new("bigFloatNewFromFrac", &[ValType::I64, ValType::I64], Some(ValType::I32)),
     VmHookSignature::new("bigFloatNewFromSci", &[ValType::I64, ValType::I64], Some(ValType::I32)),

@@ -52,7 +52,7 @@
             "step": "scCall",
             "id": "create-settlement-farmer-payout",
             "tx": {
-                "from": "address:owner",
+                "from": "address:governance",
                 "to": "sc:mrv_come_settlement",
                 "function": "createSettlement",
                 "arguments": [
@@ -77,7 +77,7 @@
             "step": "scCall",
             "id": "create-settlement-buffer-contribution",
             "tx": {
-                "from": "address:owner",
+                "from": "address:governance",
                 "to": "sc:mrv_come_settlement",
                 "function": "createSettlement",
                 "arguments": [

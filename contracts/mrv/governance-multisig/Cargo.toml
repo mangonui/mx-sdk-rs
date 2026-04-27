@@ -12,6 +12,9 @@ path = "src/lib.rs"
 version = "0.65.0"
 path = "../../../framework/base"
 
+[dependencies.mrv-common]
+path = "../common"
+
 [dev-dependencies.multiversx-sc-scenario]
 version = "0.65.0"
 features = ["wasmer-experimental"]

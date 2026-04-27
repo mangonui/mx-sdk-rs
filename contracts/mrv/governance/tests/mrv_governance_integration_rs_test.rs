@@ -16,7 +16,7 @@ fn world() -> ScenarioWorld {
 }
 
 #[test]
-fn mrv_governance_owner_manages_signers_and_threshold_rs() {
+fn mrv_governance_multisig_manages_signers_and_threshold_rs() {
     let mut world = world();
 
     world.account(OWNER).nonce(1).balance(1_000_000u64);
@@ -37,21 +37,98 @@ fn mrv_governance_owner_manages_signers_and_threshold_rs() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(SIGNER_ONE)
         .to(SC_ADDRESS)
         .whitebox(mrv_governance::contract_obj, |sc| {
-            sc.add_signer(SIGNER_TWO.to_managed_address());
-            sc.set_approval_threshold(2);
-            // minimum timelock is 3600 seconds
-            sc.set_timelock_seconds(3600);
+            sc.propose_add_signer(
+                ManagedBuffer::from(b"gov-add-signer"),
+                SIGNER_TWO.to_managed_address(),
+            );
+            sc.approve_proposal(ManagedBuffer::from(b"gov-add-signer"));
         });
 
-    world.query().to(SC_ADDRESS).whitebox(mrv_governance::contract_obj, |sc| {
-        assert!(sc.is_signer(SIGNER_ONE.to_managed_address()));
-        assert!(sc.is_signer(SIGNER_TWO.to_managed_address()));
-        assert_eq!(sc.approval_threshold().get(), 2);
-        assert_eq!(sc.timelock_seconds().get(), 3600);
-    });
+    world.current_block().block_timestamp_seconds(3601u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "caller not signer"))
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"gov-add-signer"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"gov-add-signer"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.propose_approval_threshold_change(ManagedBuffer::from(b"gov-threshold"), 2);
+            sc.approve_proposal(ManagedBuffer::from(b"gov-threshold"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"gov-threshold"));
+        });
+
+    world.current_block().block_timestamp_seconds(7202u64);
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"gov-threshold"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.propose_timelock_change(ManagedBuffer::from(b"gov-timelock"), 7200);
+            sc.approve_proposal(ManagedBuffer::from(b"gov-timelock"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"gov-timelock"));
+        });
+
+    world.current_block().block_timestamp_seconds(10803u64);
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"gov-timelock"));
+        });
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            assert!(sc.is_signer(SIGNER_ONE.to_managed_address()));
+            assert!(sc.is_signer(SIGNER_TWO.to_managed_address()));
+            assert_eq!(sc.approval_threshold().get(), 2);
+            assert_eq!(sc.timelock_seconds().get(), 7200);
+        });
 }
 
 #[test]

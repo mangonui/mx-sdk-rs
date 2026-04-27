@@ -18,6 +18,8 @@ where
             if panic_any.downcast_ref::<BreakpointValue>().is_some() {
                 // breakpoints are considered to be already handled
                 Ok(())
+            } else if let Some(tx_panic) = panic_any.downcast_ref::<TxPanic>() {
+                Err(tx_panic.clone())
             } else if let Some(early_exit) = panic_any.downcast_ref::<VMHooksEarlyExit>() {
                 if early_exit.code == 0 {
                     Ok(())
@@ -57,5 +59,23 @@ pub fn interpret_panic_str_as_tx_result(panic_str: &str, panic_message_flag: boo
         TxPanic::user_error(&format!("panic occurred: {panic_str}"))
     } else {
         TxPanic::user_error(err_msg::PANIC_OCCURRED)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::catch_tx_panic;
+    use multiversx_chain_vm::host::context::TxPanic;
+    use multiversx_sc::chain_core::types::ReturnCode;
+
+    #[test]
+    fn catch_tx_panic_preserves_panicked_tx_panic() {
+        let result = catch_tx_panic(true, || {
+            std::panic::panic_any(TxPanic::user_error("preserved tx panic"));
+        });
+
+        let err = result.expect_err("expected panicked TxPanic to be preserved");
+        assert_eq!(err.status, ReturnCode::UserError);
+        assert_eq!(err.message, "preserved tx panic");
     }
 }

@@ -126,13 +126,7 @@ fn identity_registry_blackbox_unauthorized_register_rejected() {
         .from(INTRUDER)
         .to(SC_ADDRESS)
         .typed(drwa_identity_registry::drwa_identity_registry_proxy::DrwaIdentityRegistryProxy)
-        .register_identity(
-            ISSUER.to_managed_address(),
-            "Blocked",
-            "US",
-            "REG-X",
-            "SPV",
-        )
+        .register_identity(ISSUER.to_managed_address(), "Blocked", "US", "REG-X", "SPV")
         .with_result(ExpectError(4u64, "caller not authorized"))
         .run();
 }
@@ -211,10 +205,10 @@ fn identity_registry_blackbox_governance_handoff() {
         .returns(ExpectValue(GOVERNANCE.to_managed_address()))
         .run();
 
-    // Owner proposes new governance
+    // Active governance proposes new governance.
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(drwa_identity_registry::drwa_identity_registry_proxy::DrwaIdentityRegistryProxy)
         .set_governance(NEW_GOVERNANCE.to_managed_address())

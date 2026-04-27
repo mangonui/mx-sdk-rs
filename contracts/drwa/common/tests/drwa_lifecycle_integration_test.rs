@@ -16,11 +16,11 @@
 
 use multiversx_sc_scenario::imports::*;
 
-use drwa_policy_registry::drwa_policy_registry_proxy::DrwaPolicyRegistryProxy;
-use drwa_identity_registry::drwa_identity_registry_proxy::DrwaIdentityRegistryProxy;
 use drwa_asset_manager::drwa_asset_manager_proxy::DrwaAssetManagerProxy;
 use drwa_attestation::DrwaAttestation;
 use drwa_attestation::drwa_attestation_proxy::DrwaAttestationProxy;
+use drwa_identity_registry::drwa_identity_registry_proxy::DrwaIdentityRegistryProxy;
+use drwa_policy_registry::drwa_policy_registry_proxy::DrwaPolicyRegistryProxy;
 
 // ── Addresses ──────────────────────────────────────────────────────────
 
@@ -34,13 +34,17 @@ const IDENTITY_SC: TestSCAddress = TestSCAddress::new("drwa-identity-registry");
 const ASSET_SC: TestSCAddress = TestSCAddress::new("drwa-asset-manager");
 const ATTESTATION_SC: TestSCAddress = TestSCAddress::new("drwa-attestation");
 
-const POLICY_CODE: MxscPath = MxscPath::new("mxsc:../../policy-registry/output/drwa-policy-registry.mxsc.json");
-const IDENTITY_CODE: MxscPath = MxscPath::new("mxsc:../../identity-registry/output/drwa-identity-registry.mxsc.json");
-const ASSET_CODE: MxscPath = MxscPath::new("mxsc:../../asset-manager/output/drwa-asset-manager.mxsc.json");
-const ATTESTATION_CODE: MxscPath = MxscPath::new("mxsc:../../attestation/output/drwa-attestation.mxsc.json");
+const POLICY_CODE: MxscPath =
+    MxscPath::new("mxsc:../../policy-registry/output/drwa-policy-registry.mxsc.json");
+const IDENTITY_CODE: MxscPath =
+    MxscPath::new("mxsc:../../identity-registry/output/drwa-identity-registry.mxsc.json");
+const ASSET_CODE: MxscPath =
+    MxscPath::new("mxsc:../../asset-manager/output/drwa-asset-manager.mxsc.json");
+const ATTESTATION_CODE: MxscPath =
+    MxscPath::new("mxsc:../../attestation/output/drwa-attestation.mxsc.json");
 
 const TOKEN_ID: &[u8] = b"CARBON-ab12cd";
-const POLICY_ID: &[u8] = b"policy-001";
+const POLICY_ID: &[u8] = TOKEN_ID;
 
 // ── World setup ────────────────────────────────────────────────────────
 
@@ -91,6 +95,14 @@ fn deploy_all() -> ScenarioWorld {
         .init(GOVERNANCE)
         .code(ASSET_CODE)
         .new_address(ASSET_SC)
+        .run();
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(ASSET_SC)
+        .typed(DrwaAssetManagerProxy)
+        .set_policy_registry_address(POLICY_SC)
         .run();
 
     // Deploy attestation (auditor = AUDITOR)
@@ -146,7 +158,10 @@ fn drwa_full_lifecycle_four_contracts() {
         .token_policy_version(ManagedBuffer::<StaticApi>::from(TOKEN_ID))
         .returns(ReturnsResult)
         .run();
-    assert_eq!(policy_version, 1u64, "policy version should be 1 after first set");
+    assert_eq!(
+        policy_version, 1u64,
+        "policy version should be 1 after first set"
+    );
 
     let policy: drwa_common::DrwaTokenPolicy<StaticApi> = world
         .query()
@@ -156,7 +171,10 @@ fn drwa_full_lifecycle_four_contracts() {
         .returns(ReturnsResult)
         .run();
     assert!(policy.drwa_enabled, "policy drwa_enabled should be true");
-    assert!(policy.strict_auditor_mode, "policy strict_auditor_mode should be true");
+    assert!(
+        policy.strict_auditor_mode,
+        "policy strict_auditor_mode should be true"
+    );
     assert_eq!(policy.allowed_investor_classes.len(), 1);
     assert_eq!(policy.allowed_jurisdictions.len(), 2);
 
@@ -183,7 +201,11 @@ fn drwa_full_lifecycle_four_contracts() {
         .identity(HOLDER.to_managed_address())
         .returns(ReturnsResult)
         .run();
-    assert_eq!(identity.subject, HOLDER.to_managed_address(), "identity subject mismatch");
+    assert_eq!(
+        identity.subject,
+        HOLDER.to_managed_address(),
+        "identity subject mismatch"
+    );
     assert_eq!(
         identity.jurisdiction_code,
         ManagedBuffer::<StaticApi>::from(b"SG"),
@@ -272,7 +294,10 @@ fn drwa_full_lifecycle_four_contracts() {
         "asset policy_id mismatch"
     );
     assert!(asset.regulated, "asset should be regulated");
-    assert!(!asset.wind_down_initiated, "wind_down should not be initiated");
+    assert!(
+        !asset.wind_down_initiated,
+        "wind_down should not be initiated"
+    );
 
     // ── Step 4: Sync holder compliance mirror ──────────────────────
     world
@@ -283,14 +308,14 @@ fn drwa_full_lifecycle_four_contracts() {
         .sync_holder_compliance(
             ManagedBuffer::from(TOKEN_ID),
             HOLDER.to_managed_address(),
-            ManagedBuffer::from(b"approved"),     // kyc_status
-            ManagedBuffer::from(b"clear"),         // aml_status
-            ManagedBuffer::from(b"ACCREDITED"),    // investor_class
-            ManagedBuffer::from(b"SG"),            // jurisdiction_code
-            0u64,                                  // expiry_round (permanent)
-            false,                                 // transfer_locked
-            false,                                 // receive_locked
-            false,                                 // auditor_authorized (not yet attested)
+            ManagedBuffer::from(b"approved"),   // kyc_status
+            ManagedBuffer::from(b"clear"),      // aml_status
+            ManagedBuffer::from(b"ACCREDITED"), // investor_class
+            ManagedBuffer::from(b"SG"),         // jurisdiction_code
+            0u64,                               // expiry_round (permanent)
+            false,                              // transfer_locked
+            false,                              // receive_locked
+            false,                              // auditor_authorized (not yet attested)
         )
         .run();
 
@@ -305,7 +330,10 @@ fn drwa_full_lifecycle_four_contracts() {
         )
         .returns(ReturnsResult)
         .run();
-    assert_eq!(mirror.holder_policy_version, 1u64, "holder mirror version should be 1");
+    assert_eq!(
+        mirror.holder_policy_version, 1u64,
+        "holder mirror version should be 1"
+    );
     assert_eq!(
         mirror.kyc_status,
         ManagedBuffer::<StaticApi>::from(b"approved"),
@@ -326,9 +354,18 @@ fn drwa_full_lifecycle_four_contracts() {
         ManagedBuffer::<StaticApi>::from(b"SG"),
         "holder mirror jurisdiction mismatch"
     );
-    assert!(!mirror.transfer_locked, "holder should not be transfer locked");
-    assert!(!mirror.receive_locked, "holder should not be receive locked");
-    assert!(!mirror.auditor_authorized, "holder should not be auditor authorized yet");
+    assert!(
+        !mirror.transfer_locked,
+        "holder should not be transfer locked"
+    );
+    assert!(
+        !mirror.receive_locked,
+        "holder should not be receive locked"
+    );
+    assert!(
+        !mirror.auditor_authorized,
+        "holder should not be auditor authorized yet"
+    );
 
     // ── Step 5: Record auditor attestation ─────────────────────────
     world
@@ -373,9 +410,10 @@ fn drwa_full_lifecycle_four_contracts() {
     );
     assert!(attestation.approved, "attestation should be approved");
 
-    // ── Step 6: Update holder mirror with auditor_authorized = true ─
-    // In production, the sync adapter handles this. In this test we
-    // simulate the governance updating the mirror after attestation.
+    // ── Step 6: Re-sync holder compliance without touching attestation-owned state ─
+    // The attestation contract is the only authority allowed to control
+    // auditor authorization. Asset-manager may refresh compliance fields,
+    // but it must not be able to promote the holder into that state.
     world
         .tx()
         .from(GOVERNANCE)
@@ -391,11 +429,15 @@ fn drwa_full_lifecycle_four_contracts() {
             0u64,
             false,
             false,
-            true, // auditor_authorized — now true after attestation
+            false, // attestation-owned; asset-manager must not set this
         )
         .run();
 
-    // Verify the updated holder mirror reflects auditor authorization
+    // Verify the updated holder mirror keeps the asset-manager-owned
+    // compliance fields while leaving auditor authorization to attestation.
+    // Because the second asset-manager sync is byte-identical to the first
+    // asset-manager-owned state, it should be a no-op and must not bump the
+    // holder-mirror version just because attestation state exists elsewhere.
     let mirror_final: drwa_common::DrwaHolderMirror<StaticApi> = world
         .query()
         .to(ASSET_SC)
@@ -406,8 +448,14 @@ fn drwa_full_lifecycle_four_contracts() {
         )
         .returns(ReturnsResult)
         .run();
-    assert_eq!(mirror_final.holder_policy_version, 2u64, "holder mirror version should be 2 after second sync");
-    assert!(mirror_final.auditor_authorized, "holder should be auditor authorized after attestation sync");
+    assert_eq!(
+        mirror_final.holder_policy_version, 1u64,
+        "holder mirror version should remain 1 when the second sync is a no-op"
+    );
+    assert!(
+        !mirror_final.auditor_authorized,
+        "asset-manager mirror must not claim auditor authorization"
+    );
 
     // ── Cross-contract consistency verification ────────────────────
     // The token policy, identity, asset record, holder mirror, and
@@ -416,35 +464,31 @@ fn drwa_full_lifecycle_four_contracts() {
 
     // Policy: drwa_enabled=true, strict_auditor_mode=true
     // Identity: kyc=approved, aml=clear, investor_class=ACCREDITED, jurisdiction=SG
-    // Asset: regulated=true, policy_id=policy-001
-    // Mirror: kyc=approved, aml=clear, investor_class=ACCREDITED, jurisdiction=SG, auditor_authorized=true
+    // Asset: regulated=true, policy_id equals token_id.
+    // Mirror: kyc=approved, aml=clear, investor_class=ACCREDITED, jurisdiction=SG
     // Attestation: approved=true, type=MRV
 
     // Verify jurisdiction alignment: identity jurisdiction matches mirror jurisdiction
     assert_eq!(
-        identity_updated.jurisdiction_code,
-        mirror_final.jurisdiction_code,
+        identity_updated.jurisdiction_code, mirror_final.jurisdiction_code,
         "jurisdiction mismatch between identity-registry and asset-manager mirror"
     );
 
     // Verify investor class alignment: identity investor_class matches mirror investor_class
     assert_eq!(
-        identity_updated.investor_class,
-        mirror_final.investor_class,
+        identity_updated.investor_class, mirror_final.investor_class,
         "investor_class mismatch between identity-registry and asset-manager mirror"
     );
 
     // Verify KYC alignment
     assert_eq!(
-        identity_updated.kyc_status,
-        mirror_final.kyc_status,
+        identity_updated.kyc_status, mirror_final.kyc_status,
         "kyc_status mismatch between identity-registry and asset-manager mirror"
     );
 
     // Verify AML alignment
     assert_eq!(
-        identity_updated.aml_status,
-        mirror_final.aml_status,
+        identity_updated.aml_status, mirror_final.aml_status,
         "aml_status mismatch between identity-registry and asset-manager mirror"
     );
 
@@ -455,12 +499,8 @@ fn drwa_full_lifecycle_four_contracts() {
         "attestation subject should match holder address"
     );
 
-    // Verify auditor authorization in mirror is consistent with attestation approval
-    assert_eq!(
-        mirror_final.auditor_authorized,
-        attestation.approved,
-        "auditor_authorized in mirror should match attestation approved status"
-    );
+    // Verify attestation remains the independent source of truth for auditor authorization.
+    assert!(attestation.approved, "attestation should remain approved");
 }
 
 /// Validates that the lifecycle correctly handles deactivation flows:
@@ -480,7 +520,10 @@ fn drwa_lifecycle_deactivation_flow() {
         .typed(DrwaPolicyRegistryProxy)
         .set_token_policy(
             ManagedBuffer::from(TOKEN_ID),
-            true, false, false, false,
+            true,
+            false,
+            false,
+            false,
             empty_classes,
             empty_jurisdictions,
         )
@@ -597,8 +640,14 @@ fn drwa_lifecycle_deactivation_flow() {
         .token_policy(ManagedBuffer::<StaticApi>::from(TOKEN_ID))
         .returns(ReturnsResult)
         .run();
-    assert!(!policy.drwa_enabled, "policy drwa_enabled should be false after deactivation");
-    assert_eq!(policy.token_policy_version, 2u64, "policy version should be 2 after deactivation");
+    assert!(
+        !policy.drwa_enabled,
+        "policy drwa_enabled should be false after deactivation"
+    );
+    assert_eq!(
+        policy.token_policy_version, 2u64,
+        "policy version should be 2 after deactivation"
+    );
 }
 
 /// Validates that a revoked auditor cannot record new attestations.
@@ -650,7 +699,10 @@ fn drwa_lifecycle_revoked_auditor_rejected() {
             "evidence-hash-101",
             true,
         )
-        .with_result(ExpectError(4, "storage decode error (key: auditor): bad array length"))
+        .with_result(ExpectError(
+            4,
+            "storage decode error (key: auditor): bad array length",
+        ))
         .run();
 }
 
@@ -663,10 +715,10 @@ fn drwa_lifecycle_expired_governance_proposal_rejected() {
     let new_gov = TestAddress::new("new_governance");
     world.account(new_gov).nonce(1).balance(1_000_000u64);
 
-    // Owner proposes a new governance address on policy-registry
+    // Active governance proposes a new governance address on policy-registry.
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(POLICY_SC)
         .typed(DrwaPolicyRegistryProxy)
         .set_governance(new_gov.to_managed_address())
@@ -702,7 +754,10 @@ fn drwa_lifecycle_cross_contract_auth_boundaries() {
         .typed(DrwaPolicyRegistryProxy)
         .set_token_policy(
             ManagedBuffer::from(TOKEN_ID),
-            true, false, false, false,
+            true,
+            false,
+            false,
+            false,
             ManagedVec::<StaticApi, ManagedBuffer<StaticApi>>::new(),
             ManagedVec::<StaticApi, ManagedBuffer<StaticApi>>::new(),
         )

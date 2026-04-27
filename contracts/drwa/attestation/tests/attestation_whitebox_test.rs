@@ -1,5 +1,5 @@
 use drwa_attestation::DrwaAttestation;
-use drwa_common::{DrwaCallerDomain, DrwaSyncOperationType};
+use drwa_common::{DrwaCallerDomain, DrwaSyncOperationType, set_drwa_sync_hook_test_result};
 use multiversx_sc::types::ManagedBuffer;
 use multiversx_sc_scenario::imports::*;
 
@@ -64,6 +64,56 @@ fn attestation_whitebox_flow() {
             assert_eq!(record.attestation_type, ManagedBuffer::from(b"MRV"));
             assert_eq!(record.evidence_hash, ManagedBuffer::from(b"hash-001"));
             assert!(record.approved);
+        });
+}
+
+#[test]
+fn attestation_sync_hook_failure_reverts_attestation_record() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(AUDITOR).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_attestation::contract_obj, |sc| {
+            sc.init(AUDITOR.to_managed_address());
+        });
+
+    set_drwa_sync_hook_test_result(11);
+    world
+        .tx()
+        .from(AUDITOR)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "native mirror sync failed"))
+        .whitebox(drwa_attestation::contract_obj, |sc| {
+            sc.record_attestation(
+                ManagedBuffer::from(TOKEN_ID),
+                SUBJECT.to_managed_address(),
+                ManagedBuffer::from(b"MRV"),
+                ManagedBuffer::from(b"hash-rollback"),
+                true,
+            );
+        });
+    set_drwa_sync_hook_test_result(0);
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(drwa_attestation::contract_obj, |sc| {
+            let token_id = ManagedBuffer::from(TOKEN_ID);
+            assert!(
+                sc.attestation(&token_id, &SUBJECT.to_managed_address())
+                    .is_empty()
+            );
+            assert!(
+                sc.holder_auditor_authorization_version(&token_id, &SUBJECT.to_managed_address())
+                    .is_empty()
+            );
         });
 }
 
@@ -331,6 +381,62 @@ fn attestation_record_revocation_increments_auditor_authorization_version() {
 }
 
 #[test]
+fn attestation_identical_record_is_noop() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(AUDITOR).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_attestation::contract_obj, |sc| {
+            sc.init(AUDITOR.to_managed_address());
+        });
+
+    world
+        .tx()
+        .from(AUDITOR)
+        .to(SC_ADDRESS)
+        .whitebox(drwa_attestation::contract_obj, |sc| {
+            let envelope = sc.record_attestation(
+                ManagedBuffer::from(TOKEN_ID),
+                SUBJECT.to_managed_address(),
+                ManagedBuffer::from(b"MRV"),
+                ManagedBuffer::from(b"hash-001"),
+                true,
+            );
+            assert_eq!(envelope.operations.get(0).version, 1);
+        });
+
+    world
+        .tx()
+        .from(AUDITOR)
+        .to(SC_ADDRESS)
+        .whitebox(drwa_attestation::contract_obj, |sc| {
+            let envelope = sc.record_attestation(
+                ManagedBuffer::from(TOKEN_ID),
+                SUBJECT.to_managed_address(),
+                ManagedBuffer::from(b"MRV"),
+                ManagedBuffer::from(b"hash-001"),
+                true,
+            );
+            assert_eq!(envelope.operations.len(), 0);
+            assert_eq!(
+                sc.holder_auditor_authorization_version(
+                    &ManagedBuffer::from(TOKEN_ID),
+                    &SUBJECT.to_managed_address(),
+                )
+                .get(),
+                1
+            );
+        });
+}
+
+#[test]
 fn attestation_rejects_invalid_token_id_format() {
     let mut world = world();
 
@@ -415,10 +521,7 @@ fn attestation_revoke_attestation_rs() {
         .from(AUDITOR)
         .to(SC_ADDRESS)
         .whitebox(drwa_attestation::contract_obj, |sc| {
-            sc.revoke_attestation(
-                ManagedBuffer::from(TOKEN_ID),
-                SUBJECT.to_managed_address(),
-            );
+            sc.revoke_attestation(ManagedBuffer::from(TOKEN_ID), SUBJECT.to_managed_address());
         });
 
     // Verify approved is now false
@@ -459,10 +562,7 @@ fn attestation_revoke_nonexistent_fails() {
         .to(SC_ADDRESS)
         .returns(ExpectError(4u64, "attestation does not exist"))
         .whitebox(drwa_attestation::contract_obj, |sc| {
-            sc.revoke_attestation(
-                ManagedBuffer::from(TOKEN_ID),
-                SUBJECT.to_managed_address(),
-            );
+            sc.revoke_attestation(ManagedBuffer::from(TOKEN_ID), SUBJECT.to_managed_address());
         });
 }
 
@@ -522,10 +622,7 @@ fn attestation_revoke_rejects_zero_address_subject() {
         .to(SC_ADDRESS)
         .returns(ExpectError(4u64, "subject address must not be zero"))
         .whitebox(drwa_attestation::contract_obj, |sc| {
-            sc.revoke_attestation(
-                ManagedBuffer::from(TOKEN_ID),
-                ManagedAddress::zero(),
-            );
+            sc.revoke_attestation(ManagedBuffer::from(TOKEN_ID), ManagedAddress::zero());
         });
 }
 

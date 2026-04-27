@@ -1,16 +1,23 @@
+use mrv_governance::MrvGovernance;
 use mrv_gsoc_registry::GsocRegistry;
 use multiversx_sc::types::ManagedBuffer;
 use multiversx_sc_scenario::imports::*;
 
 const OWNER: TestAddress = TestAddress::new("owner");
 const SC_ADDRESS: TestSCAddress = TestSCAddress::new("gsoc-registry");
+const GOVERNANCE_SC: TestSCAddress = TestSCAddress::new("mrv-governance");
 const CODE_PATH: MxscPath = MxscPath::new("mxsc:output/mrv-gsoc-registry.mxsc.json");
+const GOVERNANCE_CODE: MxscPath =
+    MxscPath::new("mxsc:../../governance/output/mrv-governance.mxsc.json");
 const GOVERNANCE: TestAddress = TestAddress::new("governance");
+const SIGNER_ONE: TestAddress = TestAddress::new("signer-one");
+const SIGNER_TWO: TestAddress = TestAddress::new("signer-two");
 
 fn world() -> ScenarioWorld {
     let mut world = ScenarioWorld::new().executor_config(ExecutorConfig::full_suite());
     world.set_current_dir_from_workspace("contracts/mrv/gsoc-registry");
     world.register_contract(CODE_PATH, mrv_gsoc_registry::ContractBuilder);
+    world.register_contract(GOVERNANCE_CODE, mrv_governance::ContractBuilder);
     world
 }
 
@@ -146,6 +153,7 @@ fn gsoc_registry_cancel_reservation_rs() {
 fn gsoc_registry_retire_serial_rs() {
     let mut world = world();
     world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(VERIFIER).nonce(1).balance(1_000_000u64);
 
     world
         .tx()
@@ -164,6 +172,7 @@ fn gsoc_registry_retire_serial_rs() {
         .to(SC_ADDRESS)
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.reserve_serial(ManagedBuffer::from(b"KE-DH-00003"));
+            sc.add_verifier(VERIFIER.to_managed_address());
             sc.register_serial_batch(
                 ManagedBuffer::from(b"KE-DH-00003"),
                 ManagedBuffer::from(b"proj-001"),
@@ -177,7 +186,7 @@ fn gsoc_registry_retire_serial_rs() {
     // Retire
     world
         .tx()
-        .from(OWNER)
+        .from(VERIFIER)
         .to(SC_ADDRESS)
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.record_retirement(
@@ -200,6 +209,7 @@ fn gsoc_registry_retire_serial_rs() {
 fn gsoc_registry_double_retire_fails_rs() {
     let mut world = world();
     world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(VERIFIER).nonce(1).balance(1_000_000u64);
 
     world
         .tx()
@@ -217,6 +227,7 @@ fn gsoc_registry_double_retire_fails_rs() {
         .to(SC_ADDRESS)
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.reserve_serial(ManagedBuffer::from(b"KE-DH-00004"));
+            sc.add_verifier(VERIFIER.to_managed_address());
             sc.register_serial_batch(
                 ManagedBuffer::from(b"KE-DH-00004"),
                 ManagedBuffer::from(b"proj-001"),
@@ -225,6 +236,13 @@ fn gsoc_registry_double_retire_fails_rs() {
                 ManagedBuffer::from(b"KE-DH-00004"),
                 50u64,
             );
+        });
+
+    world
+        .tx()
+        .from(VERIFIER)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.record_retirement(
                 ManagedBuffer::from(b"KE-DH-00004"),
                 ManagedBuffer::from(b"Acme"),
@@ -235,7 +253,7 @@ fn gsoc_registry_double_retire_fails_rs() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(VERIFIER)
         .to(SC_ADDRESS)
         .returns(ExpectError(4u64, "SERIAL_ALREADY_RETIRED"))
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
@@ -268,7 +286,10 @@ fn gsoc_registry_register_without_reservation_fails_rs() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "SERIAL_NOT_RESERVED: call reserveSerial() first"))
+        .returns(ExpectError(
+            4u64,
+            "SERIAL_NOT_RESERVED: call reserveSerial() first",
+        ))
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.register_serial_batch(
                 ManagedBuffer::from(b"KE-DH-UNRESERVED"),
@@ -360,7 +381,10 @@ fn gsoc_registry_cancel_registered_fails_rs() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "SERIAL_NOT_RESERVED: cannot cancel a non-reserved serial"))
+        .returns(ExpectError(
+            4u64,
+            "SERIAL_NOT_RESERVED: cannot cancel a non-reserved serial",
+        ))
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.cancel_reservation(ManagedBuffer::from(b"KE-DH-CANC01"));
         });
@@ -451,7 +475,10 @@ fn gsoc_registry_project_serial_count_rs() {
         .query()
         .to(SC_ADDRESS)
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
-            assert_eq!(sc.get_project_serials(ManagedBuffer::from(b"proj-count")), 2u64);
+            assert_eq!(
+                sc.get_project_serials(ManagedBuffer::from(b"proj-count")),
+                2u64
+            );
             assert_eq!(sc.total_supply().get(), 300u64);
         });
 }
@@ -460,6 +487,7 @@ fn gsoc_registry_project_serial_count_rs() {
 fn gsoc_registry_retire_unregistered_fails_rs() {
     let mut world = world();
     world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(VERIFIER).nonce(1).balance(1_000_000u64);
 
     world
         .tx()
@@ -469,16 +497,81 @@ fn gsoc_registry_retire_unregistered_fails_rs() {
         .new_address(SC_ADDRESS)
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.init(OWNER.to_managed_address());
+            sc.add_verifier(VERIFIER.to_managed_address());
+        });
+
+    world
+        .tx()
+        .from(VERIFIER)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "serial not registered"))
+        .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
+            sc.record_retirement(
+                ManagedBuffer::from(b"NONEXISTENT"),
+                ManagedBuffer::from(b"Acme"),
+                OWNER.to_managed_address(),
+                ManagedBuffer::from(b"0xburn"),
+            );
+        });
+}
+
+#[test]
+fn gsoc_registry_retirement_requires_registered_verifier_rs() {
+    let mut world = world();
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(VERIFIER).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
+            sc.init(OWNER.to_managed_address());
+            sc.reserve_serial(ManagedBuffer::from(b"KE-DH-VER01"));
+            sc.register_serial_batch(
+                ManagedBuffer::from(b"KE-DH-VER01"),
+                ManagedBuffer::from(b"proj-001"),
+                2026u32,
+                ManagedBuffer::from(b"KE-DH-VER01"),
+                ManagedBuffer::from(b"KE-DH-VER01"),
+                1u64,
+            );
         });
 
     world
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "serial not registered"))
+        .returns(ExpectError(
+            4u64,
+            "VERIFIER_ONLY: retirement recording requires a registered verifier",
+        ))
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.record_retirement(
-                ManagedBuffer::from(b"NONEXISTENT"),
+                ManagedBuffer::from(b"KE-DH-VER01"),
+                ManagedBuffer::from(b"Acme"),
+                OWNER.to_managed_address(),
+                ManagedBuffer::from(b"0xburn"),
+            );
+        });
+
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
+            sc.add_verifier(VERIFIER.to_managed_address());
+        });
+
+    world
+        .tx()
+        .from(VERIFIER)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
+            sc.record_retirement(
+                ManagedBuffer::from(b"KE-DH-VER01"),
                 ManagedBuffer::from(b"Acme"),
                 OWNER.to_managed_address(),
                 ManagedBuffer::from(b"0xburn"),
@@ -508,7 +601,7 @@ fn gsoc_registry_verifier_lifecycle_rs() {
     // Add verifier
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             sc.add_verifier(VERIFIER.to_managed_address());
@@ -535,5 +628,88 @@ fn gsoc_registry_verifier_lifecycle_rs() {
         .to(SC_ADDRESS)
         .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
             assert!(!sc.is_verifier(VERIFIER.to_managed_address()));
+        });
+}
+
+#[test]
+fn gsoc_registry_governance_pause_blocks_serial_mutations_rs() {
+    let mut world = world();
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_ONE).nonce(1).balance(1_000_000u64);
+    world.account(SIGNER_TWO).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(GOVERNANCE_CODE)
+        .new_address(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            let mut signers = MultiValueEncoded::new();
+            signers.push(SIGNER_ONE.to_managed_address());
+            signers.push(SIGNER_TWO.to_managed_address());
+            sc.init(2, 3600, signers);
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.propose_emergency_pause(ManagedBuffer::from(b"pause-gsoc-001"), true);
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"pause-gsoc-001"));
+        });
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.approve_proposal(ManagedBuffer::from(b"pause-gsoc-001"));
+        });
+
+    world.current_block().block_timestamp_seconds(3601u64);
+
+    world
+        .tx()
+        .from(SIGNER_TWO)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.execute_proposal(ManagedBuffer::from(b"pause-gsoc-001"));
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
+            sc.set_governance_read_address(GOVERNANCE_SC.to_managed_address());
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "MRV_GOVERNANCE_PAUSED"))
+        .whitebox(mrv_gsoc_registry::contract_obj, |sc| {
+            sc.reserve_serial(ManagedBuffer::from(b"PAUSED-SERIAL-001"));
         });
 }

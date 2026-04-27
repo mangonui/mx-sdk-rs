@@ -1,0 +1,5 @@
+identity_registry_address = "erd1qqqqqqqqqqqqqpgqjkgtggr4yzsq6jrh3dd2ngk9dtn6s0r5dy7s2xxq64"
+policy_registry_address = "erd1qqqqqqqqqqqqqpgqx45tcnyfu8gllc3xdepeqrd2tykkx7d9dy7sl3hrrl"
+asset_manager_address = "erd1qqqqqqqqqqqqqpgqc39yehapqhhcq5sn27chllh0xhm3sdv6dy7s80d8zr"
+attestation_address = "erd1qqqqqqqqqqqqqpgqvckj2uamzefts3lgunwyn32t9zjxahz2dy7szt8scp"
+auth_admin_address = "erd1qqqqqqqqqqqqqpgqdmjr4mnap2hw8yjmryk2rqmtzj5h6vu3dy7s9ndsuk"

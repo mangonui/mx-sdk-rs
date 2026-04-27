@@ -7,9 +7,9 @@
 #![allow(dead_code)]
 #![allow(clippy::all)]
 
-use multiversx_sc::proxy_imports::*;
-use drwa_common::DrwaSyncEnvelope;
 use crate::AttestationRecord;
+use drwa_common::DrwaSyncEnvelope;
+use multiversx_sc::proxy_imports::*;
 
 pub struct DrwaAttestationProxy;
 

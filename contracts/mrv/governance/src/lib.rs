@@ -3,7 +3,8 @@
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
-pub use mrv_common::{GsocVerifierEntry, VerifierAccreditation};
+pub use mrv_common::resolve_storage_version_upgrade;
+use mrv_common::{GsocVerifierEntry, VerifierAccreditation};
 
 /// Proposal type for emergency pause/unpause actions.
 const PROPOSAL_TYPE_PAUSE: u8 = 1;
@@ -13,11 +14,23 @@ const PROPOSAL_TYPE_VERIFIER_ACCREDITATION: u8 = 2;
 /// The proposal target stores the farmer address and the `role` field stores
 /// the badge metadata hash.
 const PROPOSAL_TYPE_BADGE_ISSUANCE: u8 = 3;
+/// Proposal type used for signer-set expansion.
+const PROPOSAL_TYPE_ADD_SIGNER: u8 = 4;
+/// Proposal type used for signer-set reduction.
+const PROPOSAL_TYPE_REMOVE_SIGNER: u8 = 5;
+/// Proposal type used for approval-threshold changes.
+const PROPOSAL_TYPE_SET_APPROVAL_THRESHOLD: u8 = 6;
+/// Proposal type used for timelock-duration changes.
+const PROPOSAL_TYPE_SET_TIMELOCK_SECONDS: u8 = 7;
+/// Proposal type used for GSOC verifier revocation.
+const PROPOSAL_TYPE_REMOVE_GSOC_VERIFIER: u8 = 8;
 
 /// Multi-sig governance proposal supporting pause, verifier accreditation,
 /// and Green Badge issuance actions.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct GovernanceProposal<M: ManagedTypeApi> {
     pub proposal_id: ManagedBuffer<M>,
     pub proposal_type: u8,
@@ -31,7 +44,9 @@ pub struct GovernanceProposal<M: ManagedTypeApi> {
 
 /// GSOC verifier proposal record.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct GsocVerifierProposal<M: ManagedTypeApi> {
     pub verifier_did: ManagedAddress<M>,
     pub credentials_cid: ManagedBuffer<M>,
@@ -54,7 +69,10 @@ pub trait MrvGovernance {
         initial_signers: MultiValueEncoded<ManagedAddress>,
     ) {
         require!(approval_threshold > 0, "invalid approval threshold");
-        require!(timelock_seconds >= 3600, "TIMELOCK_TOO_LOW: must be at least 1 hour (3600 seconds)");
+        require!(
+            timelock_seconds >= 3600,
+            "TIMELOCK_TOO_LOW: must be at least 1 hour (3600 seconds)"
+        );
 
         let mut signer_count = 0u32;
         for signer in initial_signers {
@@ -65,7 +83,10 @@ pub trait MrvGovernance {
             }
         }
 
-        require!(signer_count >= approval_threshold, "threshold exceeds signer count");
+        require!(
+            signer_count >= approval_threshold,
+            "threshold exceeds signer count"
+        );
         self.approval_threshold().set(approval_threshold);
         self.timelock_seconds().set(timelock_seconds);
         self.paused().set(false);
@@ -74,18 +95,14 @@ pub trait MrvGovernance {
     }
 
     /// Adds a governance signer.
-    #[only_owner]
-    #[endpoint(addSigner)]
-    fn add_signer(&self, signer: ManagedAddress) {
+    fn apply_add_signer(&self, signer: ManagedAddress) {
         require!(!signer.is_zero(), "signer must not be zero");
         self.signers().insert(signer.clone());
         self.signer_added_event(&signer);
     }
 
     /// Removes a governance signer. Fails if the signer count would drop below threshold.
-    #[only_owner]
-    #[endpoint(removeSigner)]
-    fn remove_signer(&self, signer: ManagedAddress) {
+    fn apply_remove_signer(&self, signer: ManagedAddress) {
         require!(self.signers().contains(&signer), "not a signer");
         self.signers().swap_remove(&signer);
         require!(
@@ -96,9 +113,7 @@ pub trait MrvGovernance {
     }
 
     /// Updates the approval quorum.
-    #[only_owner]
-    #[endpoint(setApprovalThreshold)]
-    fn set_approval_threshold(&self, approval_threshold: u32) {
+    fn apply_approval_threshold(&self, approval_threshold: u32) {
         require!(approval_threshold > 0, "invalid approval threshold");
         require!(
             (self.signers().len() as u32) >= approval_threshold,
@@ -109,12 +124,146 @@ pub trait MrvGovernance {
     }
 
     /// Updates the timelock duration.
-    #[only_owner]
-    #[endpoint(setTimelockSeconds)]
-    fn set_timelock_seconds(&self, timelock_seconds: u64) {
-        require!(timelock_seconds >= 3600, "TIMELOCK_TOO_SHORT: minimum 3600 seconds (1 hour)");
+    fn apply_timelock_seconds(&self, timelock_seconds: u64) {
+        require!(
+            timelock_seconds >= 3600,
+            "TIMELOCK_TOO_SHORT: minimum 3600 seconds (1 hour)"
+        );
         self.timelock_seconds().set(timelock_seconds);
         self.timelock_changed_event(timelock_seconds);
+    }
+
+    /// Proposes adding a governance signer.
+    #[endpoint(proposeAddSigner)]
+    fn propose_add_signer(&self, proposal_id: ManagedBuffer, signer: ManagedAddress) {
+        self.require_signer();
+        require!(!proposal_id.is_empty(), "empty proposal id");
+        require!(!signer.is_zero(), "signer must not be zero");
+        require!(
+            !self.proposals().contains_key(&proposal_id),
+            "proposal already exists"
+        );
+
+        self.proposals().insert(
+            proposal_id.clone(),
+            GovernanceProposal {
+                proposal_id: proposal_id.clone(),
+                proposal_type: PROPOSAL_TYPE_ADD_SIGNER,
+                target: signer,
+                bool_value: true,
+                role: ManagedBuffer::new(),
+                eta: self
+                    .blockchain()
+                    .get_block_timestamp_seconds()
+                    .as_u64_seconds()
+                    .saturating_add(self.timelock_seconds().get()),
+                executed: false,
+                executed_at_timestamp: 0u64,
+            },
+        );
+        self.proposal_created_event(&proposal_id, PROPOSAL_TYPE_ADD_SIGNER);
+    }
+
+    /// Proposes removing a governance signer.
+    #[endpoint(proposeRemoveSigner)]
+    fn propose_remove_signer(&self, proposal_id: ManagedBuffer, signer: ManagedAddress) {
+        self.require_signer();
+        require!(!proposal_id.is_empty(), "empty proposal id");
+        require!(
+            !self.proposals().contains_key(&proposal_id),
+            "proposal already exists"
+        );
+        require!(self.signers().contains(&signer), "not a signer");
+
+        self.proposals().insert(
+            proposal_id.clone(),
+            GovernanceProposal {
+                proposal_id: proposal_id.clone(),
+                proposal_type: PROPOSAL_TYPE_REMOVE_SIGNER,
+                target: signer,
+                bool_value: false,
+                role: ManagedBuffer::new(),
+                eta: self
+                    .blockchain()
+                    .get_block_timestamp_seconds()
+                    .as_u64_seconds()
+                    .saturating_add(self.timelock_seconds().get()),
+                executed: false,
+                executed_at_timestamp: 0u64,
+            },
+        );
+        self.proposal_created_event(&proposal_id, PROPOSAL_TYPE_REMOVE_SIGNER);
+    }
+
+    /// Proposes changing the approval threshold.
+    #[endpoint(proposeApprovalThresholdChange)]
+    fn propose_approval_threshold_change(
+        &self,
+        proposal_id: ManagedBuffer,
+        approval_threshold: u32,
+    ) {
+        self.require_signer();
+        require!(!proposal_id.is_empty(), "empty proposal id");
+        require!(approval_threshold > 0, "invalid approval threshold");
+        require!(
+            !self.proposals().contains_key(&proposal_id),
+            "proposal already exists"
+        );
+
+        let encoded_threshold = self.encode_u64_payload(approval_threshold as u64);
+        self.proposals().insert(
+            proposal_id.clone(),
+            GovernanceProposal {
+                proposal_id: proposal_id.clone(),
+                proposal_type: PROPOSAL_TYPE_SET_APPROVAL_THRESHOLD,
+                target: ManagedAddress::zero(),
+                bool_value: true,
+                role: encoded_threshold,
+                eta: self
+                    .blockchain()
+                    .get_block_timestamp_seconds()
+                    .as_u64_seconds()
+                    .saturating_add(self.timelock_seconds().get()),
+                executed: false,
+                executed_at_timestamp: 0u64,
+            },
+        );
+        self.proposal_created_event(&proposal_id, PROPOSAL_TYPE_SET_APPROVAL_THRESHOLD);
+    }
+
+    /// Proposes changing the governance timelock.
+    #[endpoint(proposeTimelockChange)]
+    fn propose_timelock_change(&self, proposal_id: ManagedBuffer, timelock_seconds: u64) {
+        self.require_signer();
+        require!(!proposal_id.is_empty(), "empty proposal id");
+        require!(
+            timelock_seconds >= 3600,
+            "TIMELOCK_TOO_SHORT: minimum 3600 seconds (1 hour)"
+        );
+        require!(
+            !self.proposals().contains_key(&proposal_id),
+            "proposal already exists"
+        );
+
+        let encoded_timelock = self.encode_u64_payload(timelock_seconds);
+        self.proposals().insert(
+            proposal_id.clone(),
+            GovernanceProposal {
+                proposal_id: proposal_id.clone(),
+                proposal_type: PROPOSAL_TYPE_SET_TIMELOCK_SECONDS,
+                target: ManagedAddress::zero(),
+                bool_value: true,
+                role: encoded_timelock,
+                eta: self
+                    .blockchain()
+                    .get_block_timestamp_seconds()
+                    .as_u64_seconds()
+                    .saturating_add(self.timelock_seconds().get()),
+                executed: false,
+                executed_at_timestamp: 0u64,
+            },
+        );
+        self.proposal_created_event(&proposal_id, PROPOSAL_TYPE_SET_TIMELOCK_SECONDS);
     }
 
     /// Create an emergency pause/unpause proposal. Subject to timelock and multi-sig approval.
@@ -122,7 +271,10 @@ pub trait MrvGovernance {
     fn propose_emergency_pause(&self, proposal_id: ManagedBuffer, pause: bool) {
         self.require_signer();
         require!(!proposal_id.is_empty(), "empty proposal id");
-        require!(!self.proposals().contains_key(&proposal_id), "proposal already exists");
+        require!(
+            !self.proposals().contains_key(&proposal_id),
+            "proposal already exists"
+        );
 
         let proposal = GovernanceProposal {
             proposal_id: proposal_id.clone(),
@@ -130,7 +282,11 @@ pub trait MrvGovernance {
             target: ManagedAddress::zero(),
             bool_value: pause,
             role: ManagedBuffer::new(),
-            eta: self.blockchain().get_block_timestamp_seconds().as_u64_seconds().saturating_add(self.timelock_seconds().get()),
+            eta: self
+                .blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds()
+                .saturating_add(self.timelock_seconds().get()),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -152,7 +308,10 @@ pub trait MrvGovernance {
         require!(!proposal_id.is_empty(), "empty proposal id");
         require!(!verifier.is_zero(), "verifier must not be zero");
         require!(!role.is_empty(), "empty verifier role");
-        require!(!self.proposals().contains_key(&proposal_id), "proposal already exists");
+        require!(
+            !self.proposals().contains_key(&proposal_id),
+            "proposal already exists"
+        );
 
         let proposal = GovernanceProposal {
             proposal_id: proposal_id.clone(),
@@ -160,7 +319,11 @@ pub trait MrvGovernance {
             target: verifier,
             bool_value: approved,
             role,
-            eta: self.blockchain().get_block_timestamp_seconds().as_u64_seconds().saturating_add(self.timelock_seconds().get()),
+            eta: self
+                .blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds()
+                .saturating_add(self.timelock_seconds().get()),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -181,7 +344,10 @@ pub trait MrvGovernance {
         require!(!proposal_id.is_empty(), "empty proposal id");
         require!(!farmer.is_zero(), "farmer address must not be zero");
         require!(!badge_metadata_hash.is_empty(), "empty badge metadata hash");
-        require!(!self.proposals().contains_key(&proposal_id), "proposal already exists");
+        require!(
+            !self.proposals().contains_key(&proposal_id),
+            "proposal already exists"
+        );
 
         let proposal = GovernanceProposal {
             proposal_id: proposal_id.clone(),
@@ -189,7 +355,11 @@ pub trait MrvGovernance {
             target: farmer,
             bool_value: true,
             role: badge_metadata_hash,
-            eta: self.blockchain().get_block_timestamp_seconds().as_u64_seconds().saturating_add(self.timelock_seconds().get()),
+            eta: self
+                .blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds()
+                .saturating_add(self.timelock_seconds().get()),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -202,11 +372,18 @@ pub trait MrvGovernance {
     #[endpoint(approveProposal)]
     fn approve_proposal(&self, proposal_id: ManagedBuffer) {
         self.require_signer();
-        require!(self.proposals().contains_key(&proposal_id), "missing proposal");
-        let caller = self.blockchain().get_caller();
-        require!(!self.approvals(&proposal_id).contains(&caller), "ALREADY_APPROVED");
         require!(
-            !self.proposals()
+            self.proposals().contains_key(&proposal_id),
+            "missing proposal"
+        );
+        let caller = self.blockchain().get_caller();
+        require!(
+            !self.approvals(&proposal_id).contains(&caller),
+            "ALREADY_APPROVED"
+        );
+        require!(
+            !self
+                .proposals()
                 .get(&proposal_id)
                 .unwrap_or_else(|| sc_panic!("missing proposal"))
                 .executed,
@@ -235,15 +412,21 @@ pub trait MrvGovernance {
             .unwrap_or_else(|| sc_panic!("missing proposal"));
         require!(!proposal.executed, "proposal already executed");
         require!(
-            (self.approvals(&proposal_id).len() as u32) >= self.approval_threshold().get(),
+            self.current_proposal_approval_count(&proposal_id) >= self.approval_threshold().get(),
             "insufficient approvals"
         );
         require!(
-            self.blockchain().get_block_timestamp_seconds().as_u64_seconds() >= proposal.eta,
+            self.blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds()
+                >= proposal.eta,
             "timelock not elapsed"
         );
         require!(
-            self.blockchain().get_block_timestamp_seconds().as_u64_seconds() <= proposal.eta.saturating_add(2_592_000u64),
+            self.blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds()
+                <= proposal.eta.saturating_add(2_592_000u64),
             "PROPOSAL_EXPIRED: must be executed within 30 days of timelock expiry"
         );
 
@@ -255,7 +438,10 @@ pub trait MrvGovernance {
                 verifier: proposal.target.clone(),
                 approved: proposal.bool_value,
                 role: proposal.role.clone(),
-                updated_at: self.blockchain().get_block_timestamp_seconds().as_u64_seconds(),
+                updated_at: self
+                    .blockchain()
+                    .get_block_timestamp_seconds()
+                    .as_u64_seconds(),
             };
             self.verifier_accreditations()
                 .insert(proposal.target.clone(), accreditation);
@@ -271,16 +457,32 @@ pub trait MrvGovernance {
             );
             self.badge_issuances()
                 .insert(proposal.target.clone(), proposal.role.clone());
-            self.badge_issued_event(
-                &proposal.target,
-                &proposal.role,
+            self.badge_issued_event(&proposal.target, &proposal.role);
+        } else if proposal.proposal_type == PROPOSAL_TYPE_ADD_SIGNER {
+            self.apply_add_signer(proposal.target.clone());
+        } else if proposal.proposal_type == PROPOSAL_TYPE_REMOVE_SIGNER {
+            self.apply_remove_signer(proposal.target.clone());
+        } else if proposal.proposal_type == PROPOSAL_TYPE_SET_APPROVAL_THRESHOLD {
+            let approval_threshold_u64 = self.decode_u64_payload(&proposal.role);
+            require!(
+                approval_threshold_u64 <= u32::MAX as u64,
+                "approval threshold out of range"
             );
+            self.apply_approval_threshold(approval_threshold_u64 as u32);
+        } else if proposal.proposal_type == PROPOSAL_TYPE_SET_TIMELOCK_SECONDS {
+            let timelock_seconds = self.decode_u64_payload(&proposal.role);
+            self.apply_timelock_seconds(timelock_seconds);
+        } else if proposal.proposal_type == PROPOSAL_TYPE_REMOVE_GSOC_VERIFIER {
+            self.apply_remove_gsoc_verifier(proposal.target.clone());
         } else {
             sc_panic!("unsupported proposal type");
         }
 
         proposal.executed = true;
-        proposal.executed_at_timestamp = self.blockchain().get_block_timestamp_seconds().as_u64_seconds();
+        proposal.executed_at_timestamp = self
+            .blockchain()
+            .get_block_timestamp_seconds()
+            .as_u64_seconds();
         self.proposals().insert(proposal_id.clone(), proposal);
         self.approvals(&proposal_id).clear();
         self.proposal_executed_event(&proposal_id);
@@ -345,7 +547,9 @@ pub trait MrvGovernance {
     fn approvals(&self, proposal_id: &ManagedBuffer) -> UnorderedSetMapper<ManagedAddress>;
 
     #[storage_mapper("verifierAccreditations")]
-    fn verifier_accreditations(&self) -> MapMapper<ManagedAddress, VerifierAccreditation<Self::Api>>;
+    fn verifier_accreditations(
+        &self,
+    ) -> MapMapper<ManagedAddress, VerifierAccreditation<Self::Api>>;
 
     /// Stores the governance-approved badge metadata hash for each farmer.
     ///
@@ -375,11 +579,7 @@ pub trait MrvGovernance {
     fn timelock_changed_event(&self, timelock_seconds: u64);
 
     #[event("proposalCreated")]
-    fn proposal_created_event(
-        &self,
-        #[indexed] proposal_id: &ManagedBuffer,
-        proposal_type: u8,
-    );
+    fn proposal_created_event(&self, #[indexed] proposal_id: &ManagedBuffer, proposal_type: u8);
 
     #[event("proposalApproved")]
     fn proposal_approved_event(
@@ -436,15 +636,22 @@ pub trait MrvGovernance {
         let proposal_id = self.next_gsoc_verifier_proposal_id().get();
         self.next_gsoc_verifier_proposal_id().set(proposal_id + 1);
 
-        let eta = self.blockchain().get_block_timestamp_seconds().as_u64_seconds().saturating_add(self.timelock_seconds().get());
+        let eta = self
+            .blockchain()
+            .get_block_timestamp_seconds()
+            .as_u64_seconds()
+            .saturating_add(self.timelock_seconds().get());
 
-        self.gsoc_verifier_proposals().insert(proposal_id, GsocVerifierProposal {
-            verifier_did: verifier_did.clone(),
-            credentials_cid: credentials_cid.clone(),
-            jurisdiction: jurisdiction.clone(),
-            eta,
-            executed: false,
-        });
+        self.gsoc_verifier_proposals().insert(
+            proposal_id,
+            GsocVerifierProposal {
+                verifier_did: verifier_did.clone(),
+                credentials_cid: credentials_cid.clone(),
+                jurisdiction: jurisdiction.clone(),
+                eta,
+                executed: false,
+            },
+        );
 
         self.gsoc_verifier_proposed_event(&verifier_did, &jurisdiction);
     }
@@ -457,7 +664,9 @@ pub trait MrvGovernance {
             self.gsoc_verifier_proposals().contains_key(&proposal_id),
             "proposal not found"
         );
-        let proposal = self.gsoc_verifier_proposals().get(&proposal_id)
+        let proposal = self
+            .gsoc_verifier_proposals()
+            .get(&proposal_id)
             .unwrap_or_else(|| sc_panic!("missing proposal"));
         require!(!proposal.executed, "proposal already executed");
 
@@ -479,14 +688,16 @@ pub trait MrvGovernance {
             "proposal not found"
         );
 
-        let proposal = self.gsoc_verifier_proposals().get(&proposal_id)
+        let proposal = self
+            .gsoc_verifier_proposals()
+            .get(&proposal_id)
             .unwrap_or_else(|| sc_panic!("missing proposal"));
         require!(!proposal.executed, "proposal already executed");
-        let current_ts = self.blockchain().get_block_timestamp_seconds().as_u64_seconds();
-        require!(
-            current_ts >= proposal.eta,
-            "timelock not expired"
-        );
+        let current_ts = self
+            .blockchain()
+            .get_block_timestamp_seconds()
+            .as_u64_seconds();
+        require!(current_ts >= proposal.eta, "timelock not expired");
         // GSOC verifier proposals expire after 30 days, matching the
         // main governance proposal expiry window.
         require!(
@@ -494,41 +705,92 @@ pub trait MrvGovernance {
             "GSOC_PROPOSAL_EXPIRED: must be executed within 30 days of timelock expiry"
         );
 
-        let approval_count = self.gsoc_verifier_approvals(proposal_id).len();
+        let approval_count = self.current_gsoc_verifier_approval_count(proposal_id);
         let threshold = self.approval_threshold().get();
         require!(
-            approval_count >= threshold as usize,
+            approval_count >= threshold,
             "INSUFFICIENT_APPROVALS: need at least threshold approvals for GSOC verifier proposals"
         );
 
         let verifier_did = proposal.verifier_did.clone();
 
-        self.gsoc_verifier_registry().insert(verifier_did.clone(), GsocVerifierEntry {
-            credentials_cid: proposal.credentials_cid,
-            jurisdiction: proposal.jurisdiction,
-            registered_at: self.blockchain().get_block_timestamp_seconds().as_u64_seconds(),
-            approved: true,
-        });
+        self.gsoc_verifier_registry().insert(
+            verifier_did.clone(),
+            GsocVerifierEntry {
+                credentials_cid: proposal.credentials_cid,
+                jurisdiction: proposal.jurisdiction,
+                registered_at: self
+                    .blockchain()
+                    .get_block_timestamp_seconds()
+                    .as_u64_seconds(),
+                approved: true,
+            },
+        );
 
         self.gsoc_verifier_approvals(proposal_id).clear();
         self.gsoc_verifier_proposals().remove(&proposal_id);
         self.gsoc_verifier_added_event(&verifier_did);
     }
 
-    /// Removes a GSOC verifier immediately (no timelock). Owner-only.
-    #[only_owner]
-    #[endpoint(removeGsocVerifier)]
-    fn remove_gsoc_verifier(&self, verifier_did: ManagedAddress) {
+    /// Proposes revoking a GSOC verifier through the standard timelocked
+    /// governance proposal flow.
+    #[endpoint(proposeRemoveGsocVerifier)]
+    fn propose_remove_gsoc_verifier(
+        &self,
+        proposal_id: ManagedBuffer,
+        verifier_did: ManagedAddress,
+    ) {
+        self.require_signer();
+        require!(!proposal_id.is_empty(), "empty proposal id");
+        require!(
+            !self.proposals().contains_key(&proposal_id),
+            "proposal already exists"
+        );
         require!(
             self.gsoc_verifier_registry().contains_key(&verifier_did),
             "verifier not found"
         );
 
-        self.gsoc_verifier_registry().entry(verifier_did.clone()).and_modify(|r| {
-            r.approved = false;
-        });
+        self.proposals().insert(
+            proposal_id.clone(),
+            GovernanceProposal {
+                proposal_id: proposal_id.clone(),
+                proposal_type: PROPOSAL_TYPE_REMOVE_GSOC_VERIFIER,
+                target: verifier_did,
+                bool_value: false,
+                role: ManagedBuffer::new(),
+                eta: self
+                    .blockchain()
+                    .get_block_timestamp_seconds()
+                    .as_u64_seconds()
+                    .saturating_add(self.timelock_seconds().get()),
+                executed: false,
+                executed_at_timestamp: 0u64,
+            },
+        );
+        self.proposal_created_event(&proposal_id, PROPOSAL_TYPE_REMOVE_GSOC_VERIFIER);
+    }
+
+    fn apply_remove_gsoc_verifier(&self, verifier_did: ManagedAddress) {
+        require!(
+            self.gsoc_verifier_registry().contains_key(&verifier_did),
+            "verifier not found"
+        );
+        let revoked_at = self
+            .blockchain()
+            .get_block_timestamp_seconds()
+            .as_u64_seconds();
+
+        self.gsoc_verifier_registry()
+            .entry(verifier_did.clone())
+            .and_modify(|r| {
+                r.approved = false;
+            });
+        self.gsoc_verifier_revoked_at(&verifier_did).set(revoked_at);
+        self.gsoc_verifier_requires_review(&verifier_did).set(true);
 
         self.gsoc_verifier_removed_event(&verifier_did);
+        self.gsoc_verifier_revocation_review_required_event(&verifier_did, revoked_at);
     }
 
     #[view(isGsocVerifierApproved)]
@@ -537,6 +799,36 @@ pub trait MrvGovernance {
             Some(entry) => entry.approved,
             None => false,
         }
+    }
+
+    #[view(getGsocVerifierRevokedAt)]
+    fn get_gsoc_verifier_revoked_at(&self, verifier_did: ManagedAddress) -> u64 {
+        self.gsoc_verifier_revoked_at(&verifier_did).get()
+    }
+
+    #[view(isGsocVerifierReviewRequired)]
+    fn is_gsoc_verifier_review_required(&self, verifier_did: ManagedAddress) -> bool {
+        self.gsoc_verifier_requires_review(&verifier_did).get()
+    }
+
+    fn current_proposal_approval_count(&self, proposal_id: &ManagedBuffer) -> u32 {
+        let mut count = 0u32;
+        for approver in self.approvals(proposal_id).iter() {
+            if self.signers().contains(&approver) {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    fn current_gsoc_verifier_approval_count(&self, proposal_id: u64) -> u32 {
+        let mut count = 0u32;
+        for approver in self.gsoc_verifier_approvals(proposal_id).iter() {
+            if self.signers().contains(&approver) {
+                count += 1;
+            }
+        }
+        count
     }
 
     #[storage_mapper("gsocVerifierRegistry")]
@@ -552,6 +844,15 @@ pub trait MrvGovernance {
     #[storage_mapper("nextGsocVerifierProposalId")]
     fn next_gsoc_verifier_proposal_id(&self) -> SingleValueMapper<u64>;
 
+    #[storage_mapper("gsocVerifierRevokedAt")]
+    fn gsoc_verifier_revoked_at(&self, verifier_did: &ManagedAddress) -> SingleValueMapper<u64>;
+
+    #[storage_mapper("gsocVerifierRequiresReview")]
+    fn gsoc_verifier_requires_review(
+        &self,
+        verifier_did: &ManagedAddress,
+    ) -> SingleValueMapper<bool>;
+
     #[event("gsocVerifierProposed")]
     fn gsoc_verifier_proposed_event(
         &self,
@@ -565,6 +866,25 @@ pub trait MrvGovernance {
     #[event("gsocVerifierRemoved")]
     fn gsoc_verifier_removed_event(&self, #[indexed] verifier_did: &ManagedAddress);
 
+    #[event("gsocVerifierRevocationReviewRequired")]
+    fn gsoc_verifier_revocation_review_required_event(
+        &self,
+        #[indexed] verifier_did: &ManagedAddress,
+        revoked_at: u64,
+    );
+
+    fn encode_u64_payload(&self, value: u64) -> ManagedBuffer {
+        ManagedBuffer::from(&value.to_be_bytes()[..])
+    }
+
+    fn decode_u64_payload(&self, payload: &ManagedBuffer) -> u64 {
+        let raw = payload.to_boxed_bytes();
+        require!(raw.as_slice().len() == 8, "invalid numeric payload");
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(raw.as_slice());
+        u64::from_be_bytes(bytes)
+    }
+
     /// Storage layout version for forward-compatible upgrades.
     #[view(getStorageVersion)]
     #[storage_mapper("storageVersion")]
@@ -573,9 +893,11 @@ pub trait MrvGovernance {
     /// Upgrades storage layout version if needed and preserves existing state.
     #[upgrade]
     fn upgrade(&self) {
-        let current = self.storage_version().get();
-        if current < 1u32 {
-            self.storage_version().set(1u32);
+        let stored = self.storage_version().get();
+        let target = resolve_storage_version_upgrade(stored, 1u32, 1u32)
+            .unwrap_or_else(|message| sc_panic!(message));
+        if stored != target {
+            self.storage_version().set(target);
         }
     }
 }

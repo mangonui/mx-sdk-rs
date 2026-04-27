@@ -3,6 +3,8 @@
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
 
+use mrv_common::resolve_storage_version_upgrade;
+
 const MIN_SIGNERS: usize = 2;
 /// Proposals expire after 48 hours. This is intentionally shorter than the
 /// 30-day window used by `mrv-governance` for timelocked proposals, because
@@ -11,7 +13,9 @@ const PROPOSAL_EXPIRY_SECONDS: u64 = 172_800;
 
 /// Generic governance proposal with typed action metadata.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct GovProposal<M: ManagedTypeApi> {
     pub proposal_id: ManagedBuffer<M>,
     pub proposer: ManagedAddress<M>,
@@ -24,7 +28,9 @@ pub struct GovProposal<M: ManagedTypeApi> {
 
 /// Dispute record with vote tallies, requested action, and resolution state.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct DisputeRecord<M: ManagedTypeApi> {
     pub dispute_id: ManagedBuffer<M>,
     pub rfq_id: ManagedBuffer<M>,
@@ -42,10 +48,14 @@ pub struct DisputeRecord<M: ManagedTypeApi> {
     pub created_at: u64,
 }
 
-/// Governance multisig contract for proposal approval and dispute voting.
+/// Operational multisig contract for Dugong-side decision recording and
+/// dispute voting.
 ///
-/// Records decisions on-chain. Off-chain operators observe emitted events
-/// and carry out approved operational follow-up.
+/// This contract is intentionally not the chain-authoritative governance
+/// holder for `mrv-registry` or `mrv-gsoc-registry`. It records signer-approved
+/// operational decisions and dispute outcomes on-chain, while canonical MRV
+/// governance for privileged registry mutations is handled by the separate
+/// `mrv-governance` contract.
 #[multiversx_sc::contract]
 pub trait GovernanceMultisig {
     #[init]
@@ -123,7 +133,10 @@ pub trait GovernanceMultisig {
             target_address,
             action_data,
             executed: false,
-            created_at: self.blockchain().get_block_timestamp_seconds().as_u64_seconds(),
+            created_at: self
+                .blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds(),
         };
 
         self.proposals().insert(proposal_id.clone(), proposal);
@@ -153,7 +166,12 @@ pub trait GovernanceMultisig {
         self.proposal_approved_event(&proposal_id, &caller, approval_count);
     }
 
-    /// Executes a proposal that has reached the approval threshold and has not expired.
+    /// Marks a proposal as executed once it has reached the approval threshold
+    /// and has not expired.
+    ///
+    /// This endpoint records the approved operational decision on-chain and
+    /// emits the execution event. It does not dispatch a downstream cross-
+    /// contract call.
     #[endpoint(executeProposal)]
     fn execute_proposal(&self, proposal_id: ManagedBuffer) {
         let caller = self.blockchain().get_caller();
@@ -164,12 +182,14 @@ pub trait GovernanceMultisig {
         let proposal = proposal.unwrap();
         require!(!proposal.executed, "proposal already executed");
         require!(
-            self.blockchain().get_block_timestamp_seconds().as_u64_seconds() <= proposal.created_at + PROPOSAL_EXPIRY_SECONDS,
+            self.blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds()
+                <= proposal.created_at + PROPOSAL_EXPIRY_SECONDS,
             "PROPOSAL_EXPIRED: proposal must be executed within expiry window"
         );
-        // The approval set is the source of truth for execution quorum.
         require!(
-            self.approvals(&proposal_id).len() as u32 >= self.threshold().get(),
+            self.current_proposal_approval_count(&proposal_id) >= self.threshold().get(),
             "insufficient approvals"
         );
 
@@ -221,8 +241,16 @@ pub trait GovernanceMultisig {
             action_taken: ManagedBuffer::new(),
             decided_at: 0u64,
             total_signers_at_creation: self.signers().len() as u32,
-            created_at: self.blockchain().get_block_timestamp_seconds().as_u64_seconds(),
+            created_at: self
+                .blockchain()
+                .get_block_timestamp_seconds()
+                .as_u64_seconds(),
         };
+
+        let mut eligible_signer_set = self.dispute_eligible_signer_set(&dispute_id);
+        for signer in self.signers().iter() {
+            eligible_signer_set.insert(signer.as_managed_buffer().clone());
+        }
 
         self.disputes().insert(dispute_id.clone(), record);
         self.dispute_submitted_event(&dispute_id);
@@ -231,11 +259,7 @@ pub trait GovernanceMultisig {
     /// Casts an approval or rejection vote on a dispute and resolves it once a
     /// two-thirds supermajority is reached.
     #[endpoint(voteOnDispute)]
-    fn vote_on_dispute(
-        &self,
-        dispute_id: ManagedBuffer,
-        approve: bool,
-    ) {
+    fn vote_on_dispute(&self, dispute_id: ManagedBuffer, approve: bool) {
         let caller = self.blockchain().get_caller();
         require!(self.signers().contains(&caller), "caller not a signer");
         require!(
@@ -243,31 +267,44 @@ pub trait GovernanceMultisig {
             "dispute not found"
         );
 
-        let dispute_vote_key = (dispute_id.clone(), caller.as_managed_buffer().clone());
-        require!(
-            !self.dispute_votes().contains_key(&dispute_vote_key),
-            "already voted on this dispute"
-        );
         let dispute_check = self.disputes().get(&dispute_id).unwrap();
         require!(!dispute_check.resolved, "dispute already resolved");
-        let now = self.blockchain().get_block_timestamp_seconds().as_u64_seconds();
+        let now = self
+            .blockchain()
+            .get_block_timestamp_seconds()
+            .as_u64_seconds();
         require!(
             now <= dispute_check.created_at.saturating_add(2_592_000u64),
             "DISPUTE_EXPIRED: disputes must be resolved within 30 days of creation"
         );
 
+        let caller_buf = caller.as_managed_buffer().clone();
+        require!(
+            self.dispute_eligible_signer_set(&dispute_id)
+                .contains(&caller_buf),
+            "caller was not eligible when dispute was created"
+        );
+
+        let dispute_vote_key = (dispute_id.clone(), caller_buf.clone());
+        require!(
+            !self.dispute_votes().contains_key(&dispute_vote_key),
+            "already voted on this dispute"
+        );
+
         self.dispute_votes().insert(dispute_vote_key, approve);
         // Track voter in per-dispute set for efficient cleanup on resolution.
-        self.dispute_voter_set(&dispute_id).insert(caller.as_managed_buffer().clone());
+        self.dispute_voter_set(&dispute_id).insert(caller_buf);
 
-        let decided_ts = self.blockchain().get_block_timestamp_seconds().as_u64_seconds();
+        let decided_ts = self
+            .blockchain()
+            .get_block_timestamp_seconds()
+            .as_u64_seconds();
+        let (active_approve_votes, active_reject_votes) =
+            self.current_dispute_vote_counts(&dispute_id);
 
         self.disputes().entry(dispute_id.clone()).and_modify(|d| {
-            if approve {
-                d.vote_approve += 1;
-            } else {
-                d.vote_reject += 1;
-            }
+            d.vote_approve = active_approve_votes;
+            d.vote_reject = active_reject_votes;
 
             let total_signers = d.total_signers_at_creation;
             let required = (total_signers * 2).div_ceil(3);
@@ -294,6 +331,7 @@ pub trait GovernanceMultisig {
                 self.dispute_votes().remove(&vk);
             }
             self.dispute_voter_set(&dispute_id).clear();
+            self.dispute_eligible_signer_set(&dispute_id).clear();
         }
 
         self.dispute_voted_event(&dispute_id, &caller, approve);
@@ -320,6 +358,50 @@ pub trait GovernanceMultisig {
         self.signers().contains(&addr)
     }
 
+    fn current_proposal_approval_count(&self, proposal_id: &ManagedBuffer) -> u32 {
+        let mut count = 0u32;
+        for approver in self.approvals(proposal_id).iter() {
+            if self.signers().contains(&approver) {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    fn current_dispute_vote_counts(&self, dispute_id: &ManagedBuffer) -> (u32, u32) {
+        let mut approve_count = 0u32;
+        let mut reject_count = 0u32;
+        for voter_buf in self.dispute_voter_set(dispute_id).iter() {
+            if !self
+                .dispute_eligible_signer_set(dispute_id)
+                .contains(&voter_buf)
+            {
+                continue;
+            }
+            if !self.is_current_signer_buffer(&voter_buf) {
+                continue;
+            }
+            let vote_key = (dispute_id.clone(), voter_buf.clone());
+            if let Some(approve) = self.dispute_votes().get(&vote_key) {
+                if approve {
+                    approve_count += 1;
+                } else {
+                    reject_count += 1;
+                }
+            }
+        }
+        (approve_count, reject_count)
+    }
+
+    fn is_current_signer_buffer(&self, voter_buf: &ManagedBuffer) -> bool {
+        for signer in self.signers().iter() {
+            if signer.as_managed_buffer() == voter_buf {
+                return true;
+            }
+        }
+        false
+    }
+
     #[storage_mapper("threshold")]
     fn threshold(&self) -> SingleValueMapper<u32>;
 
@@ -343,6 +425,14 @@ pub trait GovernanceMultisig {
     /// Cleared when the dispute resolves.
     #[storage_mapper("disputeVoterSet")]
     fn dispute_voter_set(&self, dispute_id: &ManagedBuffer) -> UnorderedSetMapper<ManagedBuffer>;
+
+    /// Per-dispute signer snapshot captured at submission time. Newly added
+    /// signers cannot vote on older disputes with smaller frozen thresholds.
+    #[storage_mapper("disputeEligibleSignerSet")]
+    fn dispute_eligible_signer_set(
+        &self,
+        dispute_id: &ManagedBuffer,
+    ) -> UnorderedSetMapper<ManagedBuffer>;
 
     #[event("signerAdded")]
     fn signer_added_event(&self, #[indexed] signer: &ManagedAddress);
@@ -383,9 +473,11 @@ pub trait GovernanceMultisig {
     /// Upgrades storage layout version if needed and preserves existing state.
     #[upgrade]
     fn upgrade(&self) {
-        let current = self.storage_version().get();
-        if current < 1u32 {
-            self.storage_version().set(1u32);
+        let stored = self.storage_version().get();
+        let target = resolve_storage_version_upgrade(stored, 1u32, 1u32)
+            .unwrap_or_else(|message| sc_panic!(message));
+        if stored != target {
+            self.storage_version().set(target);
         }
     }
 }

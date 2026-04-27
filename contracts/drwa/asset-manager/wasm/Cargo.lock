@@ -25,6 +25,7 @@ name = "drwa-asset-manager"
 version = "0.0.0"
 dependencies = [
  "drwa-common",
+ "drwa-policy-registry",
  "multiversx-sc",
 ]
 
@@ -40,6 +41,14 @@ dependencies = [
 name = "drwa-common"
 version = "0.0.0"
 dependencies = [
+ "multiversx-sc",
+]
+
+[[package]]
+name = "drwa-policy-registry"
+version = "0.0.0"
+dependencies = [
+ "drwa-common",
  "multiversx-sc",
 ]
 

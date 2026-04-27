@@ -1,11 +1,24 @@
+use drwa_policy_registry;
 use multiversx_sc_scenario::imports::*;
 
 fn world() -> ScenarioWorld {
     let mut blockchain = ScenarioWorld::new().executor_config(ExecutorConfig::full_suite());
     blockchain.set_current_dir_from_workspace("contracts/drwa/asset-manager");
     blockchain.register_contract(
-        "mxsc:output/drwa-asset-manager.mxsc.json",
+        "mxsc:../output/drwa-asset-manager.mxsc.json",
         drwa_asset_manager::ContractBuilder,
+    );
+    blockchain.register_contract(
+        "mxsc:../../asset-manager/output/drwa-asset-manager.mxsc.json",
+        drwa_asset_manager::ContractBuilder,
+    );
+    blockchain.register_contract(
+        "mxsc:../../policy-registry/output/drwa-policy-registry.mxsc.json",
+        drwa_policy_registry::ContractBuilder,
+    );
+    blockchain.register_contract(
+        "mxsc:../policy-registry/output/drwa-policy-registry.mxsc.json",
+        drwa_policy_registry::ContractBuilder,
     );
     blockchain
 }

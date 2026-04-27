@@ -1,5 +1,5 @@
-use mrv_registry::MrvRegistry;
 use mrv_common::MrvGovernanceModule;
+use mrv_registry::MrvRegistry;
 use multiversx_sc::types::ManagedBuffer;
 use multiversx_sc_scenario::imports::*;
 
@@ -20,6 +20,17 @@ fn world() -> ScenarioWorld {
     blockchain.set_current_dir_from_workspace("contracts/mrv/registry");
     blockchain.register_contract(CODE_PATH, mrv_registry::ContractBuilder);
     blockchain
+}
+
+fn register_default_approved_methodology(sc: &mrv_registry::ContractObj<DebugApi>) {
+    sc.register_methodology(
+        ManagedBuffer::from(METHODOLOGY_ID),
+        ManagedBuffer::from(METHODOLOGY_VERSION),
+        ManagedBuffer::from(METHODOLOGY_DIGEST),
+        ManagedBuffer::from(b"approved_internal"),
+        1_710_720_000,
+        0,
+    );
 }
 
 #[test]
@@ -254,12 +265,14 @@ fn mrv_registry_project_evidence_and_verification_rs() {
         .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .whitebox(mrv_registry::contract_obj, |sc| {
+            register_default_approved_methodology(&sc);
             sc.register_project(
                 ManagedBuffer::from(PROJECT_ID),
                 ManagedBuffer::from(b"tenant-public-010"),
                 ManagedBuffer::from(b"asset-public-010"),
                 ManagedBuffer::from(b"period-public-010"),
                 ManagedBuffer::from(METHODOLOGY_ID),
+                ManagedBuffer::from(METHODOLOGY_VERSION),
                 ManagedBuffer::from(b"active"),
             );
             sc.register_evidence(
@@ -277,6 +290,7 @@ fn mrv_registry_project_evidence_and_verification_rs() {
                 GOVERNANCE.to_managed_address(),
                 1_735_689_600,
             );
+            sc.register_accredited_vvb(GOVERNANCE.to_managed_address());
             sc.update_verification_case(
                 ManagedBuffer::from(VERIFICATION_CASE_ID),
                 ManagedBuffer::from(b"assigned"),
@@ -287,11 +301,14 @@ fn mrv_registry_project_evidence_and_verification_rs() {
             );
         });
 
-    world.query().to(SC_ADDRESS).whitebox(mrv_registry::contract_obj, |sc| {
-        assert_eq!(sc.get_project_records_count(), 1usize);
-        assert_eq!(sc.get_evidence_records_count(), 1usize);
-        assert_eq!(sc.get_verification_cases_count(), 1usize);
-    });
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_registry::contract_obj, |sc| {
+            assert_eq!(sc.get_project_records_count(), 1usize);
+            assert_eq!(sc.get_evidence_records_count(), 1usize);
+            assert_eq!(sc.get_verification_cases_count(), 1usize);
+        });
 }
 
 #[test]
@@ -316,6 +333,18 @@ fn mrv_registry_issuance_lifecycle_rs() {
         .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .whitebox(mrv_registry::contract_obj, |sc| {
+            // B-01: register the project before issuance so the new
+            // project-existence invariant is satisfied.
+            register_default_approved_methodology(&sc);
+            sc.register_project(
+                ManagedBuffer::from(PROJECT_ID),
+                ManagedBuffer::from(b"tenant-public-010"),
+                ManagedBuffer::from(b"asset-public-010"),
+                ManagedBuffer::from(b"period-public-010"),
+                ManagedBuffer::from(METHODOLOGY_ID),
+                ManagedBuffer::from(METHODOLOGY_VERSION),
+                ManagedBuffer::from(b"active"),
+            );
             sc.create_verification_case(
                 ManagedBuffer::from(VERIFICATION_CASE_ID),
                 ManagedBuffer::from(b"report"),
@@ -323,6 +352,7 @@ fn mrv_registry_issuance_lifecycle_rs() {
                 GOVERNANCE.to_managed_address(),
                 1_735_689_600,
             );
+            sc.register_accredited_vvb(GOVERNANCE.to_managed_address());
             sc.update_verification_case(
                 ManagedBuffer::from(VERIFICATION_CASE_ID),
                 ManagedBuffer::from(b"assigned"),
@@ -344,23 +374,29 @@ fn mrv_registry_issuance_lifecycle_rs() {
                 ManagedBuffer::from(PROJECT_ID),
                 ManagedBuffer::from(VERIFICATION_CASE_ID),
                 2026,
-                ManagedBuffer::from(b"15.0000"),
+                BigUint::from(150_000u64),
                 ManagedBuffer::new(),
             );
             sc.retire_issuance_lot(ManagedBuffer::from(LOT_ID));
+            // B-01: replacement_lot_id is empty here; the forward/back
+            // pointer lineage is exercised in the whitebox test
+            // `mrv_registry_accepts_full_replacement_lineage`.
             sc.reverse_issuance_lot(
                 ManagedBuffer::from(LOT_ID),
-                ManagedBuffer::from(b"5.0000"),
-                ManagedBuffer::from(b"lot-public-011"),
+                BigUint::from(50_000u64),
+                ManagedBuffer::new(),
             );
         });
 
-    world.query().to(SC_ADDRESS).whitebox(mrv_registry::contract_obj, |sc| {
-        let lot = sc
-            .get_issuance_lot(ManagedBuffer::from(LOT_ID))
-            .into_option()
-            .unwrap();
-        assert_eq!(lot.status.to_boxed_bytes().as_slice(), b"reversed");
-        assert_eq!(sc.get_issuance_lots_count(), 1usize);
-    });
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(mrv_registry::contract_obj, |sc| {
+            let lot = sc
+                .get_issuance_lot(ManagedBuffer::from(LOT_ID))
+                .into_option()
+                .unwrap();
+            assert_eq!(lot.status.to_boxed_bytes().as_slice(), b"reversed");
+            assert_eq!(sc.get_issuance_lots_count(), 1usize);
+        });
 }

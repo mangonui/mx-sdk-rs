@@ -7,9 +7,9 @@
 #![allow(dead_code)]
 #![allow(clippy::all)]
 
-use multiversx_sc::proxy_imports::*;
+use crate::{IdentityPrivacyCommitment, IdentityRecord};
 use drwa_common::DrwaSyncEnvelope;
-use crate::IdentityRecord;
+use multiversx_sc::proxy_imports::*;
 
 pub struct DrwaIdentityRegistryProxy;
 
@@ -102,6 +102,28 @@ where
             .original_result()
     }
 
+    pub fn register_identity_commitment<
+        Arg0: ProxyArg<ManagedAddress<Env::Api>>,
+        Arg1: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg2: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg3: ProxyArg<ManagedBuffer<Env::Api>>,
+    >(
+        self,
+        subject: Arg0,
+        identity_ref_hash: Arg1,
+        jurisdiction_code: Arg2,
+        entity_type: Arg3,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, DrwaSyncEnvelope<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("registerIdentityCommitment")
+            .argument(&subject)
+            .argument(&identity_ref_hash)
+            .argument(&jurisdiction_code)
+            .argument(&entity_type)
+            .original_result()
+    }
+
     pub fn update_compliance_status<
         Arg0: ProxyArg<ManagedAddress<Env::Api>>,
         Arg1: ProxyArg<ManagedBuffer<Env::Api>>,
@@ -149,6 +171,19 @@ where
         self.wrapped_tx
             .payment(NotPayable)
             .raw_call("getIdentity")
+            .argument(&subject)
+            .original_result()
+    }
+
+    pub fn identity_privacy_commitment<
+        Arg0: ProxyArg<ManagedAddress<Env::Api>>,
+    >(
+        self,
+        subject: Arg0,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, IdentityPrivacyCommitment<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("getIdentityPrivacyCommitment")
             .argument(&subject)
             .original_result()
     }

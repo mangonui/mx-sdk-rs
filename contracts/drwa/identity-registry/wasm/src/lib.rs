@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           12
+// Endpoints:                           14
 // Async Callback (empty):               1
-// Total number of exported functions:  15
+// Total number of exported functions:  17
 
 #![no_std]
 
@@ -21,10 +21,12 @@ multiversx_sc_wasm_adapter::endpoints! {
         init => init
         upgrade => upgrade
         registerIdentity => register_identity
+        registerIdentityCommitment => register_identity_commitment
         updateComplianceStatus => update_compliance_status
         deactivateIdentity => deactivate_identity
         eraseIdentity => erase_identity
         getIdentity => identity
+        getIdentityPrivacyCommitment => identity_privacy_commitment
         setValidityConfig => set_validity_config
         getStorageVersion => storage_version
         setGovernance => set_governance

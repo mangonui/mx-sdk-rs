@@ -22,6 +22,7 @@ fn policy_registry_init_rs() {
     let mut world = world();
 
     world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
     world
         .tx()
         .from(OWNER)
@@ -34,7 +35,7 @@ fn policy_registry_init_rs() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .whitebox(drwa_policy_registry::contract_obj, |sc| {
             let mut investor_classes = ManagedVec::new();
@@ -64,6 +65,7 @@ fn policy_registry_denial_signals_rs() {
     let mut world = world();
 
     world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
     world.account(OTHER).nonce(1).balance(1_000_000u64);
     world
         .tx()
@@ -77,7 +79,7 @@ fn policy_registry_denial_signals_rs() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .whitebox(drwa_policy_registry::contract_obj, |sc| {
             let mut investor_classes = ManagedVec::new();

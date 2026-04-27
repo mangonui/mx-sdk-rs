@@ -8,16 +8,54 @@ pub type PublicId<M> = ManagedBuffer<M>;
 
 const PENDING_GOVERNANCE_ACCEPTANCE_ROUNDS: u64 = 1_000;
 
+pub const STORAGE_VERSION_UNINITIALIZED: u32 = 0;
+
+/// Resolves an MRV contract upgrade target in a fail-closed way.
+///
+/// Rules:
+/// - `0` means the legacy contract never wrote a storage-version slot; this is
+///   treated as bootstrap initialization and upgrades directly to `current`.
+/// - `minimum_supported..=current` are accepted.
+/// - older legacy versions and any future version are rejected explicitly.
+pub fn resolve_storage_version_upgrade(
+    stored: u32,
+    current: u32,
+    minimum_supported: u32,
+) -> Result<u32, &'static str> {
+    if stored == STORAGE_VERSION_UNINITIALIZED {
+        return Ok(current);
+    }
+
+    if stored > current {
+        return Err("unsupported future storage version");
+    }
+
+    if stored < minimum_supported {
+        return Err("unsupported legacy storage version; explicit migration required");
+    }
+
+    Ok(current)
+}
+
 /// Shared two-step governance transfer and `require_governance_or_owner`
 /// guard. MRV contracts that need governance access control should
 /// implement this trait (via `#[multiversx_sc::module]`).
 #[multiversx_sc::module]
 pub trait MrvGovernanceModule {
-    /// Proposes a new governance address and starts the acceptance window.
-    #[only_owner]
+    /// Proposes the initial governance address during bootstrap, or rotates
+    /// governance when called by the currently active governance address.
     #[endpoint(setGovernance)]
     fn set_governance(&self, governance: ManagedAddress) {
         require!(!governance.is_zero(), "governance must not be zero");
+        let caller = self.blockchain().get_caller();
+        if !self.governance().is_empty() {
+            require!(caller == self.governance().get(), "caller not authorized");
+        } else {
+            require!(
+                caller == self.blockchain().get_owner_address(),
+                "caller not authorized"
+            );
+        }
         let expires_at_round = self
             .blockchain()
             .get_block_round()
@@ -51,10 +89,12 @@ pub trait MrvGovernanceModule {
         self.mrv_governance_accepted_event(&pending);
     }
 
-    /// Allows either the configured governance address or the contract owner.
+    /// Allows the configured governance address once governance is active.
+    /// Falls back to owner-only during bootstrap before governance exists.
     fn require_governance_or_owner(&self) {
         let caller = self.blockchain().get_caller();
-        if !self.governance().is_empty() && caller == self.governance().get() {
+        if !self.governance().is_empty() {
+            require!(caller == self.governance().get(), "caller not authorized");
             return;
         }
 
@@ -82,19 +122,23 @@ pub trait MrvGovernanceModule {
     #[event("mrvGovernanceAccepted")]
     fn mrv_governance_accepted_event(&self, #[indexed] governance: &ManagedAddress);
 
-    /// Revokes the current governance address, returning to owner-only control.
-    #[only_owner]
+    /// Cancels bootstrap-time pending governance only while no active
+    /// governance has yet been accepted. Once governance is active, control is
+    /// irreversible and cannot be revoked back to owner-only.
     #[endpoint(revokeGovernance)]
     fn revoke_governance(&self) {
-        let current = if !self.governance().is_empty() {
-            self.governance().get()
-        } else {
-            ManagedAddress::zero()
-        };
+        require!(
+            self.blockchain().get_caller() == self.blockchain().get_owner_address(),
+            "caller not authorized"
+        );
+        require!(
+            self.governance().is_empty(),
+            "active governance cannot be revoked"
+        );
         self.governance().clear();
         self.pending_governance().clear();
         self.pending_governance_expires_at_round().clear();
-        self.mrv_governance_revoked_event(&current);
+        self.mrv_governance_revoked_event(&ManagedAddress::zero());
     }
 
     #[event("mrvGovernanceRevoked")]
@@ -162,4 +206,35 @@ pub struct MrvReportProof<M: ManagedTypeApi> {
     pub methodology_version: u64,
     pub anchored_at: u64,
     pub evidence_manifest_hash: ManagedBuffer<M>,
+}
+
+#[cfg(test)]
+mod storage_version_tests {
+    use super::resolve_storage_version_upgrade;
+
+    #[test]
+    fn storage_version_upgrade_bootstraps_uninitialized_slot() {
+        assert_eq!(resolve_storage_version_upgrade(0, 2, 2), Ok(2));
+    }
+
+    #[test]
+    fn storage_version_upgrade_accepts_current_version() {
+        assert_eq!(resolve_storage_version_upgrade(1, 1, 1), Ok(1));
+    }
+
+    #[test]
+    fn storage_version_upgrade_rejects_unsupported_legacy_version() {
+        assert_eq!(
+            resolve_storage_version_upgrade(1, 2, 2),
+            Err("unsupported legacy storage version; explicit migration required")
+        );
+    }
+
+    #[test]
+    fn storage_version_upgrade_rejects_future_version() {
+        assert_eq!(
+            resolve_storage_version_upgrade(3, 2, 2),
+            Err("unsupported future storage version")
+        );
+    }
 }

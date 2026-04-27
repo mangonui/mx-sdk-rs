@@ -6,13 +6,13 @@
 multiversx_sc::imports!();
 
 use drwa_common::{
-    DrwaCallerDomain, DrwaSyncOperation, DrwaSyncOperationType,
-    push_len_prefixed, require_valid_aml_status, require_valid_kyc_status,
-    require_valid_token_id, serialize_sync_envelope_payload,
+    DrwaCallerDomain, DrwaSyncOperation, DrwaSyncOperationType, push_len_prefixed,
+    require_valid_aml_status, require_valid_kyc_status, require_valid_token_id,
+    serialize_sync_envelope_payload,
 };
 
 #[multiversx_sc::contract]
-pub trait DrwaCommonTestHarness {
+pub trait DrwaCommonTestHarness: drwa_common::DrwaGovernanceModule {
     #[init]
     fn init(&self) {}
 
@@ -63,6 +63,7 @@ pub trait DrwaCommonTestHarness {
             2 => DrwaCallerDomain::IdentityRegistry,
             3 => DrwaCallerDomain::Attestation,
             4 => DrwaCallerDomain::RecoveryAdmin,
+            5 => DrwaCallerDomain::AuthAdmin,
             _ => sc_panic!("invalid caller domain tag"),
         };
         let op_type = match op_type_tag {
@@ -72,6 +73,9 @@ pub trait DrwaCommonTestHarness {
             3 => DrwaSyncOperationType::HolderProfile,
             4 => DrwaSyncOperationType::HolderAuditorAuthorization,
             5 => DrwaSyncOperationType::HolderMirrorDelete,
+            6 => DrwaSyncOperationType::AuthorizedCallerUpdate,
+            7 => DrwaSyncOperationType::GovernanceApprove,
+            8 => DrwaSyncOperationType::GovernanceExecute,
             _ => sc_panic!("invalid op type tag"),
         };
 
@@ -85,5 +89,24 @@ pub trait DrwaCommonTestHarness {
         });
 
         serialize_sync_envelope_payload(&caller_domain, &operations)
+    }
+
+    #[endpoint(testEmitMaxSyncEnvelope)]
+    fn test_emit_max_sync_envelope(&self, operation_count: usize, body: ManagedBuffer) -> usize {
+        require!(operation_count <= 256, "operation_count too large");
+
+        let mut operations = ManagedVec::new();
+        for version in 1..=operation_count {
+            operations.push(DrwaSyncOperation {
+                operation_type: DrwaSyncOperationType::TokenPolicy,
+                token_id: ManagedBuffer::from(b"CARBON-ab12cd"),
+                holder: ManagedAddress::zero(),
+                version: version as u64,
+                body: body.clone(),
+            });
+        }
+
+        let envelope = self.emit_sync_envelope(DrwaCallerDomain::PolicyRegistry, operations);
+        envelope.operations.len()
     }
 }

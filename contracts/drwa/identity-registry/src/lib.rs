@@ -7,19 +7,21 @@ pub mod drwa_identity_registry_proxy;
 
 use drwa_common::{
     DrwaCallerDomain, DrwaHolderProfile, DrwaSyncEnvelope, DrwaSyncOperation,
-    DrwaSyncOperationType, push_len_prefixed, require_valid_aml_status,
-    require_valid_kyc_status,
+    DrwaSyncOperationType, push_len_prefixed, require_valid_aml_status, require_valid_kyc_status,
 };
 
 const DEFAULT_IDENTITY_VALIDITY_ROUNDS: u64 = 10_000;
 const MAX_IDENTITY_VALIDITY_ROUNDS: u64 = 100_000;
+const IDENTITY_COMMITMENT_HASH_LEN: usize = 32;
 
 /// Stores the identity data tracked for a holder address.
 ///
 /// The `subject` field is stored in the value as well as used as the storage
 /// key so off-chain consumers can read it without reconstructing the key.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct IdentityRecord<M: ManagedTypeApi> {
     pub subject: ManagedAddress<M>,
     pub legal_name: ManagedBuffer<M>,
@@ -30,6 +32,22 @@ pub struct IdentityRecord<M: ManagedTypeApi> {
     pub aml_status: ManagedBuffer<M>,
     pub investor_class: ManagedBuffer<M>,
     pub expiry_round: u64,
+}
+
+/// Forward-only privacy-preserving identity anchor.
+///
+/// The hash is expected to commit to the off-chain legal/KYC payload using a
+/// domain-separated preimage maintained by the regulated identity authority.
+/// The contract stores only the commitment, not the raw legal name or
+/// registration number.
+#[type_abi]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
+pub struct IdentityPrivacyCommitment<M: ManagedTypeApi> {
+    pub subject: ManagedAddress<M>,
+    pub identity_ref_hash: ManagedBuffer<M>,
+    pub committed_round: u64,
 }
 
 /// Manages per-holder identity records (KYC, AML, investor class, jurisdiction)
@@ -44,7 +62,8 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
     fn init(&self, governance: ManagedAddress) {
         require!(!governance.is_zero(), "governance must not be zero");
         self.governance().set(governance);
-        self.default_validity_rounds().set(DEFAULT_IDENTITY_VALIDITY_ROUNDS);
+        self.default_validity_rounds()
+            .set(DEFAULT_IDENTITY_VALIDITY_ROUNDS);
         self.max_validity_rounds().set(MAX_IDENTITY_VALIDITY_ROUNDS);
         self.storage_version().set(1u32);
     }
@@ -66,7 +85,10 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
     ) -> DrwaSyncEnvelope<Self::Api> {
         self.require_governance_or_owner();
         require!(!subject.is_zero(), "subject must not be zero");
-        require!(!jurisdiction_code.is_empty(), "jurisdiction_code is required");
+        require!(
+            !jurisdiction_code.is_empty(),
+            "jurisdiction_code is required"
+        );
         require!(
             self.identity(&subject).is_empty(),
             "IDENTITY_ALREADY_REGISTERED: use updateComplianceStatus to modify existing identity"
@@ -89,7 +111,69 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
 
         self.identity(&subject).set(record.clone());
         let envelope = self.emit_holder_profile_sync(subject.clone(), &record);
-        self.drwa_identity_registered_event(&subject, &record.jurisdiction_code, &record.entity_type);
+        self.drwa_identity_registered_event(
+            &subject,
+            &record.jurisdiction_code,
+            &record.entity_type,
+        );
+        envelope
+    }
+
+    /// Registers an identity using only a 32-byte off-chain identity
+    /// commitment instead of raw legal name / registration-number payloads.
+    ///
+    /// This is the forward-safe path for new DRWA deployments. It preserves
+    /// the existing holder-profile sync semantics while leaving historical
+    /// raw-PII records to a separate migration/disclosure process.
+    #[endpoint(registerIdentityCommitment)]
+    fn register_identity_commitment(
+        &self,
+        subject: ManagedAddress,
+        identity_ref_hash: ManagedBuffer,
+        jurisdiction_code: ManagedBuffer,
+        entity_type: ManagedBuffer,
+    ) -> DrwaSyncEnvelope<Self::Api> {
+        self.require_governance_or_owner();
+        require!(!subject.is_zero(), "subject must not be zero");
+        self.require_valid_identity_commitment_hash(&identity_ref_hash);
+        require!(
+            !jurisdiction_code.is_empty(),
+            "jurisdiction_code is required"
+        );
+        require!(
+            self.identity(&subject).is_empty(),
+            "IDENTITY_ALREADY_REGISTERED: use updateComplianceStatus to modify existing identity"
+        );
+
+        let record = IdentityRecord {
+            subject: subject.clone(),
+            legal_name: ManagedBuffer::new(),
+            jurisdiction_code,
+            registration_number: ManagedBuffer::new(),
+            entity_type,
+            kyc_status: ManagedBuffer::from(b"pending"),
+            aml_status: ManagedBuffer::from(b"pending"),
+            investor_class: ManagedBuffer::new(),
+            expiry_round: self
+                .blockchain()
+                .get_block_round()
+                .saturating_add(self.default_validity_rounds().get()),
+        };
+        let commitment = IdentityPrivacyCommitment {
+            subject: subject.clone(),
+            identity_ref_hash: identity_ref_hash.clone(),
+            committed_round: self.blockchain().get_block_round(),
+        };
+
+        self.identity(&subject).set(record.clone());
+        self.identity_privacy_commitment(&subject).set(commitment);
+        let envelope = self.emit_holder_profile_sync(subject.clone(), &record);
+        self.drwa_identity_commitment_registered_event(
+            &subject,
+            &identity_ref_hash,
+            &record.jurisdiction_code,
+            &record.entity_type,
+        );
         envelope
     }
 
@@ -114,8 +198,11 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
         require_valid_kyc_status(&kyc_status);
         require_valid_aml_status(&aml_status);
         if !investor_class.is_empty() {
-            let bytes = investor_class.to_boxed_bytes();
-            for &b in bytes.as_slice() {
+            let len = investor_class.len();
+            require!(len <= 64, "investor_class is too long");
+            let mut bytes = [0u8; 64];
+            investor_class.load_slice(0, &mut bytes[..len]);
+            for &b in &bytes[..len] {
                 require!(
                     b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-',
                     "investor_class contains invalid characters"
@@ -133,10 +220,18 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
         );
         require!(
             expiry_round == 0
-                || expiry_round
-                    <= current_round.saturating_add(self.max_validity_rounds().get()),
+                || expiry_round <= current_round.saturating_add(self.max_validity_rounds().get()),
             "expiry_round exceeds maximum identity validity window"
         );
+
+        let current = self.identity(&subject).get();
+        if current.kyc_status == kyc_status
+            && current.aml_status == aml_status
+            && current.investor_class == investor_class
+            && current.expiry_round == expiry_round
+        {
+            return self.emit_sync_noop_envelope(DrwaCallerDomain::IdentityRegistry);
+        }
 
         self.identity(&subject).update(|record| {
             record.kyc_status = kyc_status;
@@ -166,11 +261,21 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
             "identity not registered"
         );
 
+        let current = self.identity(&subject).get();
+        if current.kyc_status == ManagedBuffer::from(b"deactivated")
+            && current.aml_status == ManagedBuffer::from(b"deactivated")
+            && current.investor_class.is_empty()
+            && current.jurisdiction_code == ManagedBuffer::from(b"DEACTIVATED")
+            && current.expiry_round == 0
+        {
+            return self.emit_sync_noop_envelope(DrwaCallerDomain::IdentityRegistry);
+        }
+
         self.identity(&subject).update(|record| {
             record.kyc_status = ManagedBuffer::from(b"deactivated");
             record.aml_status = ManagedBuffer::from(b"deactivated");
             record.investor_class = ManagedBuffer::new();
-            record.jurisdiction_code = ManagedBuffer::new();
+            record.jurisdiction_code = ManagedBuffer::from(b"DEACTIVATED");
             record.expiry_round = 0;
         });
         let record = self.identity(&subject).get();
@@ -198,10 +303,7 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
     fn erase_identity(&self, subject: ManagedAddress) -> DrwaSyncEnvelope<Self::Api> {
         self.require_governance_or_owner();
         require!(!subject.is_zero(), "subject address must not be zero");
-        require!(
-            !self.identity(&subject).is_empty(),
-            "IDENTITY_NOT_FOUND"
-        );
+        require!(!self.identity(&subject).is_empty(), "IDENTITY_NOT_FOUND");
 
         let erased = IdentityRecord {
             subject: subject.clone(),
@@ -215,8 +317,12 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
             expiry_round: 0,
         };
 
-        self.identity(&subject).set(erased.clone());
-        let envelope = self.emit_holder_profile_sync(subject.clone(), &erased);
+        if self.identity(&subject).get() == erased {
+            return self.emit_sync_noop_envelope(DrwaCallerDomain::IdentityRegistry);
+        }
+
+        self.identity(&subject).set(erased);
+        let envelope = self.emit_holder_mirror_delete_sync(subject.clone());
         self.drwa_identity_erased_event(&subject);
         envelope
     }
@@ -225,6 +331,14 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
     #[view(getIdentity)]
     #[storage_mapper("identity")]
     fn identity(&self, subject: &ManagedAddress) -> SingleValueMapper<IdentityRecord<Self::Api>>;
+
+    /// Maps a holder address to its privacy-preserving identity commitment.
+    #[view(getIdentityPrivacyCommitment)]
+    #[storage_mapper("identityPrivacyCommitment")]
+    fn identity_privacy_commitment(
+        &self,
+        subject: &ManagedAddress,
+    ) -> SingleValueMapper<IdentityPrivacyCommitment<Self::Api>>;
 
     /// Monotonically increasing version counter per holder, used for
     /// staleness detection.
@@ -250,7 +364,10 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
     fn set_validity_config(&self, default_rounds: u64, max_rounds: u64) {
         self.require_governance_or_owner();
         require!(default_rounds > 0, "default_rounds must be positive");
-        require!(max_rounds >= default_rounds, "max_rounds must be >= default_rounds");
+        require!(
+            max_rounds >= default_rounds,
+            "max_rounds must be >= default_rounds"
+        );
         require!(max_rounds <= 1_000_000, "max_rounds cap exceeded");
         self.default_validity_rounds().set(default_rounds);
         self.max_validity_rounds().set(max_rounds);
@@ -263,7 +380,11 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
         subject: ManagedAddress,
         record: &IdentityRecord<Self::Api>,
     ) -> DrwaSyncEnvelope<Self::Api> {
-        let next_version = self.holder_profile_version(&subject).get() + 1;
+        let next_version = self
+            .holder_profile_version(&subject)
+            .get()
+            .checked_add(1)
+            .unwrap_or_else(|| sc_panic!("version overflow"));
         let profile = DrwaHolderProfile {
             holder_profile_version: next_version,
             kyc_status: record.kyc_status.clone(),
@@ -288,6 +409,30 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
         self.emit_sync_envelope(DrwaCallerDomain::IdentityRegistry, operations)
     }
 
+    fn emit_holder_mirror_delete_sync(
+        &self,
+        subject: ManagedAddress,
+    ) -> DrwaSyncEnvelope<Self::Api> {
+        let next_version = self
+            .holder_profile_version(&subject)
+            .get()
+            .checked_add(1)
+            .unwrap_or_else(|| sc_panic!("version overflow"));
+
+        self.holder_profile_version(&subject).set(next_version);
+
+        let mut operations = ManagedVec::new();
+        operations.push(DrwaSyncOperation {
+            operation_type: DrwaSyncOperationType::HolderMirrorDelete,
+            token_id: ManagedBuffer::new(),
+            holder: subject,
+            version: next_version,
+            body: ManagedBuffer::new(),
+        });
+
+        self.emit_sync_envelope(DrwaCallerDomain::IdentityRegistry, operations)
+    }
+
     /// Serializes the holder profile in the binary field order consumed by the
     /// native mirror.
     fn serialize_holder_profile(&self, profile: &DrwaHolderProfile<Self::Api>) -> ManagedBuffer {
@@ -307,6 +452,15 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
     fn drwa_identity_registered_event(
         &self,
         #[indexed] subject: &ManagedAddress,
+        #[indexed] jurisdiction_code: &ManagedBuffer,
+        #[indexed] entity_type: &ManagedBuffer,
+    );
+
+    #[event("drwaIdentityCommitmentRegistered")]
+    fn drwa_identity_commitment_registered_event(
+        &self,
+        #[indexed] subject: &ManagedAddress,
+        identity_ref_hash: &ManagedBuffer,
         #[indexed] jurisdiction_code: &ManagedBuffer,
         #[indexed] entity_type: &ManagedBuffer,
     );
@@ -339,5 +493,12 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
         if current < 1u32 {
             self.storage_version().set(1u32);
         }
+    }
+
+    fn require_valid_identity_commitment_hash(&self, identity_ref_hash: &ManagedBuffer) {
+        require!(
+            identity_ref_hash.len() == IDENTITY_COMMITMENT_HASH_LEN,
+            "IDENTITY_COMMITMENT_HASH_MUST_BE_32_BYTES"
+        );
     }
 }

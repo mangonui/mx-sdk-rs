@@ -1,6 +1,10 @@
 [workspace]
 resolver = "3"
 
+exclude = [
+  "contracts/drwa/interactor",
+]
+
 members = [
   "data/codec",
   "data/codec-derive",
@@ -47,6 +51,8 @@ members = [
   "contracts/drwa/asset-manager/meta",
   "contracts/drwa/attestation",
   "contracts/drwa/attestation/meta",
+  "contracts/drwa/drwa-auth-admin",
+  "contracts/drwa/drwa-auth-admin/meta",
   "contracts/mrv/common",
   "contracts/mrv/governance",
   "contracts/mrv/governance/meta",
@@ -242,3 +248,7 @@ members = [
   # "chain/wasmer-prod", ## not included, references wasmer 2.2
   # "contracts/feature-tests/gas-tests", ## uncomment for easier development
 ]
+
+[patch.crates-io]
+multiversx-chain-vm-executor = { path = "vendor/multiversx-chain-vm-executor" }
+multiversx-chain-vm-executor-wasmer-experimental = { path = "vendor/multiversx-chain-vm-executor-wasmer-experimental" }

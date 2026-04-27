@@ -33,12 +33,13 @@ fn token_id_valid_standard() {
     let mut world = world();
     deploy(&mut world);
 
-    world.tx().from(OWNER).to(SC_ADDRESS).whitebox(
-        drwa_common_test_harness::contract_obj,
-        |sc| {
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CARBON-ab12cd"));
-        },
-    );
+        });
 }
 
 #[test]
@@ -47,12 +48,13 @@ fn token_id_valid_short_ticker() {
     deploy(&mut world);
 
     // 3-char ticker: minimum valid ticker length
-    world.tx().from(OWNER).to(SC_ADDRESS).whitebox(
-        drwa_common_test_harness::contract_obj,
-        |sc| {
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"ABC-a1b2c3"));
-        },
-    );
+        });
 }
 
 #[test]
@@ -61,12 +63,13 @@ fn token_id_valid_long_ticker() {
     deploy(&mut world);
 
     // 10-char ticker: maximum valid ticker length
-    world.tx().from(OWNER).to(SC_ADDRESS).whitebox(
-        drwa_common_test_harness::contract_obj,
-        |sc| {
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"ABCDEFGHIJ-a1b2c3"));
-        },
-    );
+        });
 }
 
 #[test]
@@ -74,12 +77,13 @@ fn token_id_valid_digits_in_ticker() {
     let mut world = world();
     deploy(&mut world);
 
-    world.tx().from(OWNER).to(SC_ADDRESS).whitebox(
-        drwa_common_test_harness::contract_obj,
-        |sc| {
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"TOK3N1-aabbcc"));
-        },
-    );
+        });
 }
 
 // ── require_valid_token_id: invalid inputs ──────────────────────────
@@ -123,7 +127,10 @@ fn token_id_rejects_no_hyphen() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id must contain exactly one hyphen"))
+        .returns(ExpectError(
+            4u64,
+            "token_id must contain exactly one hyphen",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CARBONab12cd"));
         });
@@ -138,7 +145,10 @@ fn token_id_rejects_multiple_hyphens() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id must contain exactly one hyphen"))
+        .returns(ExpectError(
+            4u64,
+            "token_id must contain exactly one hyphen",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CAR-BO-ab12cd"));
         });
@@ -168,7 +178,7 @@ fn token_id_rejects_ticker_too_long() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id ticker is too long (max 10 chars)"))
+        .returns(ExpectError(4u64, "token_id is too long"))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"ABCDEFGHIJK-ab12cd"));
         });
@@ -339,10 +349,7 @@ fn kyc_status_rejects_empty() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(
-            4u64,
-            "invalid kyc_status: must be one of approved, pending, rejected, expired, not_started, deactivated",
-        ))
+        .returns(ExpectError(4u64, "invalid status length"))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_kyc_status(ManagedBuffer::new());
         });
@@ -420,10 +427,7 @@ fn aml_status_rejects_empty() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(
-            4u64,
-            "invalid aml_status: must be one of clear, pending, flagged, review, blocked, not_started, deactivated",
-        ))
+        .returns(ExpectError(4u64, "invalid status length"))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_aml_status(ManagedBuffer::new());
         });
@@ -495,10 +499,7 @@ fn push_len_prefixed_binary_data() {
             let result = sc.test_push_len_prefixed(ManagedBuffer::from(&[0xFF, 0x00, 0xAB]));
             assert_eq!(result.len(), 7);
             let bytes = result.to_boxed_bytes();
-            assert_eq!(
-                bytes.as_slice(),
-                &[0u8, 0, 0, 3, 0xFF, 0x00, 0xAB]
-            );
+            assert_eq!(bytes.as_slice(), &[0u8, 0, 0, 3, 0xFF, 0x00, 0xAB]);
         });
 }
 
@@ -525,31 +526,33 @@ fn serialize_sync_payload_token_policy_operation() {
             let bytes = result.to_boxed_bytes();
             let b = bytes.as_slice();
 
-            // Byte 0: caller domain tag (PolicyRegistry = 0)
-            assert_eq!(b[0], 0u8);
-            // Byte 1: operation type tag (TokenPolicy = 0)
-            assert_eq!(b[1], 0u8);
+            // Bytes 0..2: sync envelope schema version (v1)
+            assert_eq!(&b[0..2], &[0u8, 1]);
+            // Byte 2: caller domain tag (PolicyRegistry = 0)
+            assert_eq!(b[2], 0u8);
+            // Byte 3: operation type tag (TokenPolicy = 0)
+            assert_eq!(b[3], 0u8);
 
-            // Bytes 2..6: token_id length (10 = len("TOK-aabbcc"))
-            assert_eq!(&b[2..6], &[0u8, 0, 0, 10]);
-            // Bytes 6..16: token_id data
-            assert_eq!(&b[6..16], b"TOK-aabbcc");
+            // Bytes 4..8: token_id length (10 = len("TOK-aabbcc"))
+            assert_eq!(&b[4..8], &[0u8, 0, 0, 10]);
+            // Bytes 8..18: token_id data
+            assert_eq!(&b[8..18], b"TOK-aabbcc");
 
-            // Bytes 16..20: holder length (32 = zero address length)
-            assert_eq!(&b[16..20], &[0u8, 0, 0, 32]);
-            // Bytes 20..52: 32-byte zero address
-            assert_eq!(&b[20..52], &[0u8; 32]);
+            // Bytes 18..22: holder length (32 = zero address length)
+            assert_eq!(&b[18..22], &[0u8, 0, 0, 32]);
+            // Bytes 22..54: 32-byte zero address
+            assert_eq!(&b[22..54], &[0u8; 32]);
 
-            // Bytes 52..60: version (1) as big-endian u64
-            assert_eq!(&b[52..60], &[0u8, 0, 0, 0, 0, 0, 0, 1]);
+            // Bytes 54..62: version (1) as big-endian u64
+            assert_eq!(&b[54..62], &[0u8, 0, 0, 0, 0, 0, 0, 1]);
 
-            // Bytes 60..64: body length (2 = len("{}"))
-            assert_eq!(&b[60..64], &[0u8, 0, 0, 2]);
-            // Bytes 64..66: body data
-            assert_eq!(&b[64..66], b"{}");
+            // Bytes 62..66: body length (2 = len("{}"))
+            assert_eq!(&b[62..66], &[0u8, 0, 0, 2]);
+            // Bytes 66..68: body data
+            assert_eq!(&b[66..68], b"{}");
 
-            // Total: 1 + 1 + (4+10) + (4+32) + 8 + (4+2) = 66
-            assert_eq!(b.len(), 66);
+            // Total: 2 + 1 + 1 + (4+10) + (4+32) + 8 + (4+2) = 68
+            assert_eq!(b.len(), 68);
         });
 }
 
@@ -574,27 +577,29 @@ fn serialize_sync_payload_identity_registry_holder_profile() {
             let bytes = result.to_boxed_bytes();
             let b = bytes.as_slice();
 
-            // Byte 0: IdentityRegistry = 2
-            assert_eq!(b[0], 2u8);
-            // Byte 1: HolderProfile = 3
-            assert_eq!(b[1], 3u8);
+            // Bytes 0..2: sync envelope schema version (v1)
+            assert_eq!(&b[0..2], &[0u8, 1]);
+            // Byte 2: IdentityRegistry = 2
+            assert_eq!(b[2], 2u8);
+            // Byte 3: HolderProfile = 3
+            assert_eq!(b[3], 3u8);
 
-            // Bytes 2..6: empty token_id length (0)
-            assert_eq!(&b[2..6], &[0u8, 0, 0, 0]);
+            // Bytes 4..8: empty token_id length (0)
+            assert_eq!(&b[4..8], &[0u8, 0, 0, 0]);
 
-            // Bytes 6..10: holder length (32)
-            assert_eq!(&b[6..10], &[0u8, 0, 0, 32]);
+            // Bytes 8..12: holder length (32)
+            assert_eq!(&b[8..12], &[0u8, 0, 0, 32]);
 
-            // Bytes 10..42: 32-byte zero address
-            assert_eq!(&b[10..42], &[0u8; 32]);
+            // Bytes 12..44: 32-byte zero address
+            assert_eq!(&b[12..44], &[0u8; 32]);
 
-            // Bytes 42..50: version (42) as big-endian u64
-            assert_eq!(&b[42..50], &[0u8, 0, 0, 0, 0, 0, 0, 42]);
+            // Bytes 44..52: version (42) as big-endian u64
+            assert_eq!(&b[44..52], &[0u8, 0, 0, 0, 0, 0, 0, 42]);
 
-            // Bytes 50..54: body length (12)
-            assert_eq!(&b[50..54], &[0u8, 0, 0, 12]);
-            // Bytes 54..66: body data
-            assert_eq!(&b[54..66], b"profile-body");
+            // Bytes 52..56: body length (12)
+            assert_eq!(&b[52..56], &[0u8, 0, 0, 12]);
+            // Bytes 56..68: body data
+            assert_eq!(&b[56..68], b"profile-body");
         });
 }
 
@@ -626,7 +631,8 @@ fn serialize_sync_payload_all_caller_domains() {
                     ManagedBuffer::new(),
                 );
                 let bytes = result.to_boxed_bytes();
-                assert_eq!(bytes.as_slice()[0], expected_byte);
+                assert_eq!(&bytes.as_slice()[0..2], &[0u8, 1]);
+                assert_eq!(bytes.as_slice()[2], expected_byte);
             });
     }
 }
@@ -660,8 +666,8 @@ fn serialize_sync_payload_all_operation_types() {
                     ManagedBuffer::new(),
                 );
                 let bytes = result.to_boxed_bytes();
-                // Byte 1 is the operation type tag
-                assert_eq!(bytes.as_slice()[1], expected_byte);
+                // Byte 3 is the operation type tag after the v1 schema prefix
+                assert_eq!(bytes.as_slice()[3], expected_byte);
             });
     }
 }

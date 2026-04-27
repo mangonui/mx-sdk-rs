@@ -7,8 +7,8 @@
 #![allow(dead_code)]
 #![allow(clippy::all)]
 
-use multiversx_sc::proxy_imports::*;
 use crate::GsocSerialBatchRecord;
+use multiversx_sc::proxy_imports::*;
 
 pub struct GsocRegistryProxy;
 
@@ -149,6 +149,19 @@ where
             .argument(&beneficiary_name)
             .argument(&beneficiary_address)
             .argument(&burn_tx_hash)
+            .original_result()
+    }
+
+    pub fn add_verifier<
+        Arg0: ProxyArg<ManagedAddress<Env::Api>>,
+    >(
+        self,
+        verifier: Arg0,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ()> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("addVerifier")
+            .argument(&verifier)
             .original_result()
     }
 

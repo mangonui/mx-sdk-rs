@@ -9,7 +9,10 @@ mod only_nested;
 
 use abi_enum::*;
 use abi_test_type::*;
+use drwa_common::require_valid_token_id;
 use only_nested::*;
+
+pub use abi_test_type::{AbiEnvelope, AbiEnvelopeDomain, AbiManagedComplexVecItem};
 
 /// Contract whose sole purpose is to verify that
 /// the ABI generation framework works as expected.
@@ -160,9 +163,60 @@ pub trait AbiTester {
     }
 
     #[view]
+    fn item_for_managed_complex_vec(&self) -> ManagedVec<AbiManagedComplexVecItem<Self::Api>> {
+        let mut result = ManagedVec::new();
+        result.push(AbiManagedComplexVecItem {
+            token_id: ManagedBuffer::from(b"CARBON-ab12cd"),
+            holder: ManagedAddress::zero(),
+            version: 7,
+            body: ManagedBuffer::from(b"{\"ok\":true}"),
+        });
+        result
+    }
+
+    #[view]
+    fn envelope_like_result(&self) -> AbiEnvelope<Self::Api> {
+        AbiEnvelope {
+            domain: AbiEnvelopeDomain::Alpha,
+            payload_hash: ManagedBuffer::from(&[9u8; 32]),
+            operations: self.item_for_managed_complex_vec(),
+        }
+    }
+
+    #[endpoint]
+    fn validate_token_id_and_return_envelope(
+        &self,
+        token_id: ManagedBuffer,
+    ) -> AbiEnvelope<Self::Api> {
+        require_valid_token_id(&token_id);
+        self.envelope_like_result()
+    }
+
+    #[view]
+    fn validate_constant_token_id_and_return_envelope(&self) -> AbiEnvelope<Self::Api> {
+        let token_id = ManagedBuffer::from(b"CARBON-ab12cd");
+        require_valid_token_id(&token_id);
+        self.envelope_like_result()
+    }
+
+    #[endpoint]
+    fn set_token_scoped_value_and_return_envelope(
+        &self,
+        token_id: ManagedBuffer,
+        value: ManagedBuffer,
+    ) -> AbiEnvelope<Self::Api> {
+        require_valid_token_id(&token_id);
+        self.token_scoped_value(&token_id).set(value);
+        self.envelope_like_result()
+    }
+
+    #[view]
     fn echo_permission(&self, p: Permission) -> Permission {
         p
     }
+
+    #[storage_mapper("tokenScopedValue")]
+    fn token_scoped_value(&self, token_id: &ManagedBuffer) -> SingleValueMapper<ManagedBuffer>;
 
     #[view]
     fn item_for_array(&self, _array: &[OnlyShowsUpAsNestedInArray; 5]) {}

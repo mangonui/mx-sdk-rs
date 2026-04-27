@@ -1,4 +1,6 @@
-use drwa_common::{DrwaCallerDomain, DrwaGovernanceModule, DrwaSyncOperationType};
+use drwa_common::{
+    DrwaCallerDomain, DrwaGovernanceModule, DrwaSyncOperationType, set_drwa_sync_hook_test_result,
+};
 use drwa_identity_registry::DrwaIdentityRegistry;
 use multiversx_sc::types::ManagedBuffer;
 use multiversx_sc_scenario::imports::*;
@@ -15,6 +17,10 @@ fn world() -> ScenarioWorld {
     world.set_current_dir_from_workspace("contracts/drwa/identity-registry");
     world.register_contract(CODE_PATH, drwa_identity_registry::ContractBuilder);
     world
+}
+
+fn hash32(byte: u8) -> ManagedBuffer<DebugApi> {
+    ManagedBuffer::from(&[byte; 32][..])
 }
 
 #[test]
@@ -117,6 +123,92 @@ fn identity_registry_registration_sets_future_expiry() {
 }
 
 #[test]
+fn identity_registry_registers_privacy_commitment_without_raw_pii() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            let envelope = sc.register_identity_commitment(
+                ISSUER.to_managed_address(),
+                hash32(0x11),
+                ManagedBuffer::from(b"SG"),
+                ManagedBuffer::from(b"SPV"),
+            );
+
+            assert!(envelope.caller_domain == DrwaCallerDomain::IdentityRegistry);
+            assert_eq!(envelope.operations.len(), 1);
+            let operation = envelope.operations.get(0);
+            assert!(operation.operation_type == DrwaSyncOperationType::HolderProfile);
+        },
+    );
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            let record = sc.identity(&ISSUER.to_managed_address()).get();
+            assert_eq!(record.legal_name, ManagedBuffer::new());
+            assert_eq!(record.registration_number, ManagedBuffer::new());
+            assert_eq!(record.jurisdiction_code, ManagedBuffer::from(b"SG"));
+
+            let commitment = sc
+                .identity_privacy_commitment(&ISSUER.to_managed_address())
+                .get();
+            assert_eq!(commitment.identity_ref_hash, hash32(0x11));
+            assert_eq!(commitment.subject, ISSUER.to_managed_address());
+        });
+}
+
+#[test]
+fn identity_registry_rejects_short_privacy_commitment_hash() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(
+            4u64,
+            "IDENTITY_COMMITMENT_HASH_MUST_BE_32_BYTES",
+        ))
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.register_identity_commitment(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"too-short"),
+                ManagedBuffer::from(b"SG"),
+                ManagedBuffer::from(b"SPV"),
+            );
+        });
+}
+
+#[test]
 fn identity_registry_rejects_unauthorized_update() {
     let mut world = world();
 
@@ -170,7 +262,7 @@ fn identity_registry_requires_pending_governance_acceptance() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(INTRUDER)
         .to(SC_ADDRESS)
         .whitebox(drwa_identity_registry::contract_obj, |sc| {
             sc.set_governance(GOVERNANCE.to_managed_address());
@@ -222,7 +314,7 @@ fn identity_registry_rejects_expired_pending_governance_acceptance() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(INTRUDER)
         .to(SC_ADDRESS)
         .whitebox(drwa_identity_registry::contract_obj, |sc| {
             sc.set_governance(GOVERNANCE.to_managed_address());
@@ -278,6 +370,52 @@ fn identity_registry_register_identity_emits_holder_profile_sync_envelope() {
             assert!(!op.body.is_empty());
         },
     );
+}
+
+#[test]
+fn identity_registry_sync_hook_failure_reverts_identity_registration() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    set_drwa_sync_hook_test_result(7);
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "native mirror sync failed"))
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.register_identity(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"Rollback Corp"),
+                ManagedBuffer::from(b"SG"),
+                ManagedBuffer::from(b"REG-ROLLBACK"),
+                ManagedBuffer::from(b"SPV"),
+            );
+        });
+    set_drwa_sync_hook_test_result(0);
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            assert!(sc.identity(&ISSUER.to_managed_address()).is_empty());
+            assert!(
+                sc.holder_profile_version(&ISSUER.to_managed_address())
+                    .is_empty()
+            );
+        });
 }
 
 #[test]
@@ -361,6 +499,78 @@ fn identity_registry_rejects_unregistered_compliance_update() {
                 ManagedBuffer::from(b"clear"),
                 ManagedBuffer::from(b"issuer"),
                 100,
+            );
+        });
+}
+
+#[test]
+fn identity_registry_erase_identity_emits_holder_mirror_delete_sync() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            sc.register_identity(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"Erase Corp"),
+                ManagedBuffer::from(b"SG"),
+                ManagedBuffer::from(b"REG-ERASE"),
+                ManagedBuffer::from(b"SPV"),
+            );
+            sc.update_compliance_status(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"approved"),
+                ManagedBuffer::from(b"clear"),
+                ManagedBuffer::from(b"issuer"),
+                100,
+            );
+        },
+    );
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            let envelope = sc.erase_identity(ISSUER.to_managed_address());
+            assert!(envelope.caller_domain == DrwaCallerDomain::IdentityRegistry);
+            assert_eq!(envelope.operations.len(), 1);
+            let op = envelope.operations.get(0);
+            assert!(op.operation_type == DrwaSyncOperationType::HolderMirrorDelete);
+            assert_eq!(op.token_id, ManagedBuffer::new());
+            assert_eq!(op.holder, ISSUER.to_managed_address());
+            assert_eq!(op.version, 3);
+            assert!(op.body.is_empty());
+        },
+    );
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            let record = sc.identity(&ISSUER.to_managed_address()).get();
+            assert_eq!(record.legal_name, ManagedBuffer::new());
+            assert_eq!(record.registration_number, ManagedBuffer::new());
+            assert_eq!(record.entity_type, ManagedBuffer::new());
+            assert_eq!(record.investor_class, ManagedBuffer::new());
+            assert_eq!(record.jurisdiction_code, ManagedBuffer::from(b"ERASED"));
+            assert_eq!(record.kyc_status, ManagedBuffer::from(b"deactivated"));
+            assert_eq!(record.aml_status, ManagedBuffer::from(b"deactivated"));
+            assert_eq!(
+                sc.holder_profile_version(&ISSUER.to_managed_address())
+                    .get(),
+                3
             );
         });
 }
@@ -501,7 +711,7 @@ fn identity_registry_upgrade_preserves_storage() {
     // Call upgrade
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .whitebox(drwa_identity_registry::contract_obj, |sc| {
             sc.upgrade();
@@ -628,9 +838,78 @@ fn identity_registry_deactivate_identity() {
             let record = sc.identity(&ISSUER.to_managed_address()).get();
             assert_eq!(record.kyc_status, ManagedBuffer::from(b"deactivated"));
             assert_eq!(record.aml_status, ManagedBuffer::from(b"deactivated"));
+            assert_eq!(
+                record.jurisdiction_code,
+                ManagedBuffer::from(b"DEACTIVATED")
+            );
             // Other fields preserved
             assert_eq!(record.legal_name, ManagedBuffer::from(b"Deactivate Corp"));
         });
+}
+
+#[test]
+fn identity_registry_identical_update_is_noop() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            sc.register_identity(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"Idempotent Corp"),
+                ManagedBuffer::from(b"US"),
+                ManagedBuffer::from(b"REG-IDEMP"),
+                ManagedBuffer::from(b"SPV"),
+            );
+        },
+    );
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            let envelope = sc.update_compliance_status(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"approved"),
+                ManagedBuffer::from(b"clear"),
+                ManagedBuffer::from(b"issuer"),
+                100,
+            );
+            assert_eq!(envelope.operations.len(), 1);
+            assert_eq!(envelope.operations.get(0).version, 2);
+        },
+    );
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            let envelope = sc.update_compliance_status(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"approved"),
+                ManagedBuffer::from(b"clear"),
+                ManagedBuffer::from(b"issuer"),
+                100,
+            );
+            assert_eq!(envelope.operations.len(), 0);
+            assert_eq!(
+                sc.holder_profile_version(&ISSUER.to_managed_address())
+                    .get(),
+                2
+            );
+        },
+    );
 }
 
 #[test]
@@ -688,7 +967,7 @@ fn identity_registry_deactivate_rejects_zero_address() {
 }
 
 #[test]
-fn identity_registry_set_validity_config_by_owner() {
+fn identity_registry_set_validity_config_by_governance() {
     let mut world = world();
 
     world.account(OWNER).nonce(1).balance(1_000_000u64);
@@ -704,13 +983,14 @@ fn identity_registry_set_validity_config_by_owner() {
             sc.init(GOVERNANCE.to_managed_address());
         });
 
-    // Owner sets new validity config
-    world.tx().from(OWNER).to(SC_ADDRESS).whitebox(
-        drwa_identity_registry::contract_obj,
-        |sc| {
+    // Governance sets new validity config.
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
             sc.set_validity_config(5_000, 50_000);
-        },
-    );
+        });
 
     // Verify the config was persisted
     world
@@ -740,12 +1020,13 @@ fn identity_registry_set_validity_config_affects_registration_expiry() {
         });
 
     // Update validity config to a custom default
-    world.tx().from(OWNER).to(SC_ADDRESS).whitebox(
-        drwa_identity_registry::contract_obj,
-        |sc| {
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
             sc.set_validity_config(20_000, 200_000);
-        },
-    );
+        });
 
     // Register identity — expiry should use the updated default (20_000)
     world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
@@ -886,7 +1167,10 @@ fn identity_registry_permanent_identity_expiry_zero() {
         .to(SC_ADDRESS)
         .whitebox(drwa_identity_registry::contract_obj, |sc| {
             let record = sc.identity(&ISSUER.to_managed_address()).get();
-            assert_eq!(record.expiry_round, 0, "expiry_round must be 0 for permanent identity");
+            assert_eq!(
+                record.expiry_round, 0,
+                "expiry_round must be 0 for permanent identity"
+            );
             assert_eq!(record.kyc_status, ManagedBuffer::from(b"approved"));
             assert_eq!(record.investor_class, ManagedBuffer::from(b"issuer"));
         });

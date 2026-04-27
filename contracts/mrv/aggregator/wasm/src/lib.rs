@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           21
+// Endpoints:                           30
 // Async Callback (empty):               1
-// Total number of exported functions:  24
+// Total number of exported functions:  33
 
 #![no_std]
 
@@ -20,6 +20,8 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         upgrade => upgrade
+        setGovernanceReadAddress => set_governance_read_address
+        clearGovernanceReadAddress => clear_governance_read_address
         submitOracleReading => submit_oracle_reading
         trySeal => try_seal
         forceSealAfterTimeout => force_seal_after_timeout
@@ -33,6 +35,7 @@ multiversx_sc_wasm_adapter::endpoints! {
         deregisterVerifier => deregister_verifier
         isVerifierAuthorized => is_verifier_authorized
         registerDevice => register_device
+        registerDevicePublicKey => register_device_public_key
         deregisterDevice => deregister_device
         isDeviceRegistered => is_device_registered
         proposeOracleUpdate => propose_oracle_update
@@ -40,7 +43,13 @@ multiversx_sc_wasm_adapter::endpoints! {
         cancelExpiredProposal => cancel_expired_proposal
         getSealedEvent => get_sealed_event
         isSealed => is_sealed
+        getGovernanceReadAddress => governance_read_address
         getStorageVersion => storage_version
+        setGovernance => set_governance
+        acceptGovernance => accept_governance
+        getGovernance => governance
+        getPendingGovernance => pending_governance
+        revokeGovernance => revoke_governance
     )
 }
 

@@ -25,11 +25,11 @@ path = "../common"
 
 [dependencies.multiversx-sc-snippets]
 version = "0.65.0"
-path = "../../../../framework/snippets"
+path = "../../../framework/snippets"
 
 [dependencies.multiversx-sc]
 version = "0.65.0"
-path = "../../../../framework/base"
+path = "../../../framework/base"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -39,3 +39,7 @@ serial_test = { version = "3.2.0" }
 
 [features]
 chain-simulator-tests = []
+
+[patch.crates-io]
+multiversx-chain-vm-executor = { path = "../../../vendor/multiversx-chain-vm-executor" }
+multiversx-chain-vm-executor-wasmer-experimental = { path = "../../../vendor/multiversx-chain-vm-executor-wasmer-experimental" }

@@ -11,11 +11,17 @@
 //!
 //! Run: `cargo test --features chain-simulator-tests`
 
+use drwa_attestation::drwa_attestation_proxy::DrwaAttestationProxy;
+use drwa_identity_registry::drwa_identity_registry_proxy::DrwaIdentityRegistryProxy;
 use drwa_interactor::{drwa_interactor_config::Config, DrwaInteractor};
 use multiversx_sc_snippets::imports::*;
 use serial_test::serial;
 
-const TOKEN_CARBON: &str = "CARBON-ab12cd";
+const TOKEN_CARBON_FULL: &str = "CARBON-ac12ef";
+const TOKEN_CARBON_BLOCKED: &str = "CARBON-bc23de";
+const TOKEN_CARBON_CROSS: &str = "CARBON-de45fa";
+const TOKEN_CARBON_POLICY: &str = "CARBON-cd34ef";
+const TOKEN_CARBON_ATTEST: &str = "CARBON-ef56ab";
 
 // ---------------------------------------------------------------------------
 // Test 1: Full compliance lifecycle
@@ -33,9 +39,9 @@ async fn cs_drwa_full_compliance_lifecycle() {
     interact.generate_blocks(2).await;
 
     // Set up a fully compliant holder in shard 0
-    let holder = interact.holder_shard0_address.clone();
+    let holder = interact.holder_extra_address.clone();
     interact
-        .setup_compliant_holder(TOKEN_CARBON, &holder)
+        .setup_compliant_holder(TOKEN_CARBON_FULL, &holder)
         .await;
     interact.generate_blocks(2).await;
 
@@ -46,7 +52,7 @@ async fn cs_drwa_full_compliance_lifecycle() {
         .interactor
         .query()
         .to(identity_addr)
-        .typed(drwa_identity_registry::DrwaIdentityRegistryProxy)
+        .typed(DrwaIdentityRegistryProxy)
         .identity(holder.to_address())
         .returns(ReturnsResultUnmanaged)
         .run()
@@ -59,8 +65,8 @@ async fn cs_drwa_full_compliance_lifecycle() {
     );
     assert_eq!(
         record.aml_status,
-        ManagedBuffer::<StaticApi>::from("approved"),
-        "AML status must be approved after setup_compliant_holder"
+        ManagedBuffer::<StaticApi>::from("clear"),
+        "AML status must be clear after setup_compliant_holder"
     );
 }
 
@@ -81,16 +87,16 @@ async fn cs_drwa_cross_shard_compliant_transfer() {
     interact.generate_blocks(2).await;
 
     // Shard 0 holder
-    let holder_s0 = interact.holder_shard0_address.clone();
+    let holder_s0 = interact.holder_extra_cross_shard0_address.clone();
     interact
-        .setup_compliant_holder(TOKEN_CARBON, &holder_s0)
+        .setup_compliant_holder(TOKEN_CARBON_CROSS, &holder_s0)
         .await;
     interact.generate_blocks(2).await;
 
     // Shard 1 holder
-    let holder_s1 = interact.holder_shard1_address.clone();
+    let holder_s1 = interact.holder_extra_cross_shard1_address.clone();
     interact
-        .setup_compliant_holder(TOKEN_CARBON, &holder_s1)
+        .setup_compliant_holder(TOKEN_CARBON_CROSS, &holder_s1)
         .await;
     interact.generate_blocks(2).await;
 
@@ -101,7 +107,7 @@ async fn cs_drwa_cross_shard_compliant_transfer() {
         .interactor
         .query()
         .to(identity_addr.clone())
-        .typed(drwa_identity_registry::DrwaIdentityRegistryProxy)
+        .typed(DrwaIdentityRegistryProxy)
         .identity(holder_s0.to_address())
         .returns(ReturnsResultUnmanaged)
         .run()
@@ -114,8 +120,8 @@ async fn cs_drwa_cross_shard_compliant_transfer() {
     );
     assert_eq!(
         record_s0.aml_status,
-        ManagedBuffer::<StaticApi>::from("approved"),
-        "Shard-0 holder AML must be approved"
+        ManagedBuffer::<StaticApi>::from("clear"),
+        "Shard-0 holder AML must be clear"
     );
 
     // Verify shard-1 holder
@@ -123,7 +129,7 @@ async fn cs_drwa_cross_shard_compliant_transfer() {
         .interactor
         .query()
         .to(identity_addr)
-        .typed(drwa_identity_registry::DrwaIdentityRegistryProxy)
+        .typed(DrwaIdentityRegistryProxy)
         .identity(holder_s1.to_address())
         .returns(ReturnsResultUnmanaged)
         .run()
@@ -136,8 +142,8 @@ async fn cs_drwa_cross_shard_compliant_transfer() {
     );
     assert_eq!(
         record_s1.aml_status,
-        ManagedBuffer::<StaticApi>::from("approved"),
-        "Shard-1 holder AML must be approved"
+        ManagedBuffer::<StaticApi>::from("clear"),
+        "Shard-1 holder AML must be clear"
     );
 }
 
@@ -158,9 +164,9 @@ async fn cs_drwa_blocked_holder_denial() {
     interact.deploy_all().await;
     interact.generate_blocks(2).await;
 
-    let holder = interact.holder_shard0_address.clone();
+    let holder = interact.holder_extra_alt_address.clone();
     interact
-        .setup_blocked_holder(TOKEN_CARBON, &holder)
+        .setup_blocked_holder(TOKEN_CARBON_BLOCKED, &holder)
         .await;
     interact.generate_blocks(2).await;
 
@@ -174,7 +180,7 @@ async fn cs_drwa_blocked_holder_denial() {
         .query()
         .to(asset_mgr_addr)
         .typed(drwa_asset_manager::drwa_asset_manager_proxy::DrwaAssetManagerProxy)
-        .asset(TOKEN_CARBON)
+        .asset(TOKEN_CARBON_BLOCKED)
         .returns(ReturnsResultUnmanaged)
         .run()
         .await;
@@ -195,9 +201,9 @@ async fn cs_drwa_blocked_holder_denial() {
         .from(&auditor)
         .to(&attestation_addr)
         .gas(10_000_000u64)
-        .typed(drwa_attestation::DrwaAttestationProxy)
+        .typed(DrwaAttestationProxy)
         .record_attestation(
-            TOKEN_CARBON,
+            TOKEN_CARBON_BLOCKED,
             holder.to_address(),
             "MRV_AUDIT",
             "evidence-hash-blocked",
@@ -211,8 +217,8 @@ async fn cs_drwa_blocked_holder_denial() {
         .interactor
         .query()
         .to(&attestation_addr)
-        .typed(drwa_attestation::DrwaAttestationProxy)
-        .attestation(TOKEN_CARBON, holder.to_address())
+        .typed(DrwaAttestationProxy)
+        .attestation(TOKEN_CARBON_BLOCKED, holder.to_address())
         .returns(ReturnsResultUnmanaged)
         .run()
         .await;
@@ -228,7 +234,7 @@ async fn cs_drwa_blocked_holder_denial() {
 // ---------------------------------------------------------------------------
 
 /// Verifies the propose-accept governance rotation on the identity-registry.
-/// After rotation, the old governance address must be rejected when
+/// After rotation, a non-owner, non-governance address must be rejected when
 /// attempting to register a new identity.
 #[tokio::test]
 #[serial]
@@ -239,21 +245,20 @@ async fn cs_drwa_governance_rotation_cross_contract() {
     interact.generate_blocks(2).await;
 
     let identity_addr = interact.state.current_identity_registry_address().clone();
-    let owner = interact.owner_address.clone();
-    let new_gov = interact.governance_address.clone();
-
     // Step 1: Verify current governance matches the deploy-time address.
     let current_gov: Bech32Address = interact
         .interactor
         .query()
         .to(identity_addr.clone())
-        .typed(drwa_identity_registry::DrwaIdentityRegistryProxy)
+        .typed(DrwaIdentityRegistryProxy)
         .governance()
         .returns(ReturnsResultUnmanaged)
         .run()
         .await
-        .to_bech32_string()
+        .to_bech32(interact.interactor.get_hrp())
         .into();
+    let owner = current_gov.clone();
+    let new_gov = interact.owner_address.clone();
 
     // Step 2: Owner proposes a new governance address.
     interact
@@ -262,7 +267,7 @@ async fn cs_drwa_governance_rotation_cross_contract() {
         .from(&owner)
         .to(&identity_addr)
         .gas(10_000_000u64)
-        .typed(drwa_identity_registry::DrwaIdentityRegistryProxy)
+        .typed(DrwaIdentityRegistryProxy)
         .set_governance(new_gov.to_address())
         .run()
         .await;
@@ -276,7 +281,7 @@ async fn cs_drwa_governance_rotation_cross_contract() {
         .from(&new_gov)
         .to(&identity_addr)
         .gas(10_000_000u64)
-        .typed(drwa_identity_registry::DrwaIdentityRegistryProxy)
+        .typed(DrwaIdentityRegistryProxy)
         .accept_governance()
         .run()
         .await;
@@ -288,12 +293,12 @@ async fn cs_drwa_governance_rotation_cross_contract() {
         .interactor
         .query()
         .to(identity_addr.clone())
-        .typed(drwa_identity_registry::DrwaIdentityRegistryProxy)
+        .typed(DrwaIdentityRegistryProxy)
         .governance()
         .returns(ReturnsResultUnmanaged)
         .run()
         .await
-        .to_bech32_string()
+        .to_bech32(interact.interactor.get_hrp())
         .into();
 
     assert_eq!(
@@ -301,18 +306,18 @@ async fn cs_drwa_governance_rotation_cross_contract() {
         "Governance must reflect the newly accepted address"
     );
 
-    // Step 5: Old governance (current_gov) attempts to register an identity
-    // and must be rejected.
-    let old_gov_addr = current_gov.clone();
+    // Step 5: A caller that is neither owner nor governance attempts to
+    // register an identity and must be rejected.
+    let unauthorized_addr = interact.holder_extra_governance_address.clone();
     let result = interact
         .interactor
         .tx()
-        .from(&old_gov_addr)
+        .from(&unauthorized_addr)
         .to(&identity_addr)
         .gas(10_000_000u64)
-        .typed(drwa_identity_registry::DrwaIdentityRegistryProxy)
+        .typed(DrwaIdentityRegistryProxy)
         .register_identity(
-            interact.holder_shard0_address.to_address(),
+            interact.holder_extra_governance_address.to_address(),
             "Should Fail Corp",
             "US",
             "REG-FAIL",
@@ -359,9 +364,9 @@ async fn cs_drwa_attestation_auditor_lifecycle() {
         .from(&auditor)
         .to(&attestation_addr)
         .gas(10_000_000u64)
-        .typed(drwa_attestation::DrwaAttestationProxy)
+        .typed(DrwaAttestationProxy)
         .record_attestation(
-            TOKEN_CARBON,
+            TOKEN_CARBON_ATTEST,
             holder.to_address(),
             "MRV_AUDIT",
             "evidence-hash-001",
@@ -378,8 +383,8 @@ async fn cs_drwa_attestation_auditor_lifecycle() {
         .interactor
         .query()
         .to(attestation_addr.clone())
-        .typed(drwa_attestation::DrwaAttestationProxy)
-        .attestation(TOKEN_CARBON, holder.to_address())
+        .typed(DrwaAttestationProxy)
+        .attestation(TOKEN_CARBON_ATTEST, holder.to_address())
         .returns(ReturnsResultUnmanaged)
         .run()
         .await;
@@ -406,8 +411,8 @@ async fn cs_drwa_attestation_auditor_lifecycle() {
         .from(&auditor)
         .to(&attestation_addr)
         .gas(10_000_000u64)
-        .typed(drwa_attestation::DrwaAttestationProxy)
-        .revoke_attestation(TOKEN_CARBON, holder.to_address())
+        .typed(DrwaAttestationProxy)
+        .revoke_attestation(TOKEN_CARBON_ATTEST, holder.to_address())
         .returns(ReturnsResultUnmanaged)
         .run()
         .await;
@@ -419,8 +424,8 @@ async fn cs_drwa_attestation_auditor_lifecycle() {
         .interactor
         .query()
         .to(attestation_addr)
-        .typed(drwa_attestation::DrwaAttestationProxy)
-        .attestation(TOKEN_CARBON, holder.to_address())
+        .typed(DrwaAttestationProxy)
+        .attestation(TOKEN_CARBON_ATTEST, holder.to_address())
         .returns(ReturnsResultUnmanaged)
         .run()
         .await;
@@ -446,10 +451,10 @@ async fn cs_drwa_policy_version_tracking() {
     interact.generate_blocks(2).await;
 
     let policy_addr = interact.state.current_policy_registry_address().clone();
-    let owner = interact.owner_address.clone();
+    let owner = interact.governance_address.clone();
 
-    let empty_classes: MultiValueVec<Vec<u8>> = MultiValueVec::new();
-    let empty_jurisdictions: MultiValueVec<Vec<u8>> = MultiValueVec::new();
+    let empty_classes: Vec<Vec<u8>> = Vec::new();
+    let empty_jurisdictions: Vec<Vec<u8>> = Vec::new();
 
     // Step 1: Set initial token policy
     interact
@@ -460,7 +465,7 @@ async fn cs_drwa_policy_version_tracking() {
         .gas(15_000_000u64)
         .typed(drwa_policy_registry::drwa_policy_registry_proxy::DrwaPolicyRegistryProxy)
         .set_token_policy(
-            TOKEN_CARBON,
+            TOKEN_CARBON_POLICY,
             true,  // drwa_enabled
             false, // global_pause
             false, // strict_auditor_mode
@@ -480,7 +485,7 @@ async fn cs_drwa_policy_version_tracking() {
         .query()
         .to(policy_addr.clone())
         .typed(drwa_policy_registry::drwa_policy_registry_proxy::DrwaPolicyRegistryProxy)
-        .token_policy_version(TOKEN_CARBON)
+        .token_policy_version(TOKEN_CARBON_POLICY)
         .returns(ReturnsResultUnmanaged)
         .run()
         .await;
@@ -496,7 +501,7 @@ async fn cs_drwa_policy_version_tracking() {
         .gas(15_000_000u64)
         .typed(drwa_policy_registry::drwa_policy_registry_proxy::DrwaPolicyRegistryProxy)
         .set_token_policy(
-            TOKEN_CARBON,
+            TOKEN_CARBON_POLICY,
             true, // drwa_enabled
             true, // global_pause (changed)
             true, // strict_auditor_mode (changed)
@@ -516,7 +521,7 @@ async fn cs_drwa_policy_version_tracking() {
         .query()
         .to(policy_addr.clone())
         .typed(drwa_policy_registry::drwa_policy_registry_proxy::DrwaPolicyRegistryProxy)
-        .token_policy_version(TOKEN_CARBON)
+        .token_policy_version(TOKEN_CARBON_POLICY)
         .returns(ReturnsResultUnmanaged)
         .run()
         .await;
@@ -532,7 +537,7 @@ async fn cs_drwa_policy_version_tracking() {
         .query()
         .to(policy_addr)
         .typed(drwa_policy_registry::drwa_policy_registry_proxy::DrwaPolicyRegistryProxy)
-        .token_policy(TOKEN_CARBON)
+        .token_policy(TOKEN_CARBON_POLICY)
         .returns(ReturnsResultUnmanaged)
         .run()
         .await;
@@ -553,4 +558,76 @@ async fn cs_drwa_policy_version_tracking() {
         policy.token_policy_version, 2u64,
         "Embedded policy version must match storage version"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Test 7: Auth-admin multisig rotation smoke
+// ---------------------------------------------------------------------------
+
+/// Deploys the drwa-auth-admin multisig, proposes an auth_admin rotation,
+/// collects quorum signatures, executes the action, and verifies the
+/// authorized caller version increments to 1.
+#[tokio::test]
+#[serial]
+#[cfg_attr(not(feature = "chain-simulator-tests"), ignore)]
+async fn cs_drwa_auth_admin_rotation_smoke() {
+    let mut interact = DrwaInteractor::new(Config::chain_simulator_config()).await;
+    interact.deploy_all().await;
+    interact.deploy_auth_admin().await;
+    interact.generate_blocks(2).await;
+
+    let auth_admin_addr = interact.state.current_auth_admin_address().clone();
+
+    let action_id: u64 = interact
+        .interactor
+        .tx()
+        .from(&interact.owner_address)
+        .to(&auth_admin_addr)
+        .gas(15_000_000u64)
+        .original_result::<u64>()
+        .raw_call("proposeUpdateCallerAddress")
+        .argument(&"auth_admin")
+        .argument(&"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+        .returns(ReturnsResultUnmanaged)
+        .run()
+        .await;
+
+    interact
+        .interactor
+        .tx()
+        .from(&interact.governance_address)
+        .to(&auth_admin_addr)
+        .gas(8_000_000u64)
+        .raw_call("sign")
+        .argument(&action_id)
+        .returns(ReturnsResultUnmanaged)
+        .run()
+        .await;
+
+    interact
+        .interactor
+        .tx()
+        .from(&interact.owner_address)
+        .to(&auth_admin_addr)
+        .gas(20_000_000u64)
+        .raw_call("performAction")
+        .argument(&action_id)
+        .returns(ReturnsResultUnmanaged)
+        .run()
+        .await;
+
+    interact.generate_blocks(1).await;
+
+    let version: u64 = interact
+        .interactor
+        .query()
+        .to(auth_admin_addr)
+        .original_result::<u64>()
+        .raw_call("getAuthorizedCallerVersion")
+        .argument(&"auth_admin")
+        .returns(ReturnsResultUnmanaged)
+        .run()
+        .await;
+
+    assert_eq!(version, 1u64, "auth_admin version must increment to 1");
 }

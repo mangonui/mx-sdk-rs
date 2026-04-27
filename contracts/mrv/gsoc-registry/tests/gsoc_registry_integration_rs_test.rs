@@ -2,6 +2,7 @@ use multiversx_sc_scenario::imports::*;
 
 const OWNER: TestAddress = TestAddress::new("owner");
 const GOVERNANCE: TestAddress = TestAddress::new("governance");
+const VERIFIER: TestAddress = TestAddress::new("verifier");
 const SC_ADDRESS: TestSCAddress = TestSCAddress::new("gsoc-registry");
 const CODE_PATH: MxscPath = MxscPath::new("mxsc:output/mrv-gsoc-registry.mxsc.json");
 
@@ -18,6 +19,7 @@ fn gsoc_registry_reserve_register_retire_lifecycle_rs() {
 
     world.account(OWNER).nonce(1).balance(1_000_000u64);
     world.account(GOVERNANCE).nonce(1).balance(0u64);
+    world.account(VERIFIER).nonce(1).balance(0u64);
 
     // Deploy
     world
@@ -34,7 +36,7 @@ fn gsoc_registry_reserve_register_retire_lifecycle_rs() {
     // Reserve
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(mrv_gsoc_registry::gsoc_registry_proxy::GsocRegistryProxy)
         .reserve_serial(serial)
@@ -52,16 +54,32 @@ fn gsoc_registry_reserve_register_retire_lifecycle_rs() {
     // Register batch
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(mrv_gsoc_registry::gsoc_registry_proxy::GsocRegistryProxy)
-        .register_serial_batch(serial, "PROJ-001", 2026u32, "KE-DH-SOC-00001", "KE-DH-SOC-00001", 1u64)
+        .register_serial_batch(
+            serial,
+            "PROJ-001",
+            2026u32,
+            "KE-DH-SOC-00001",
+            "KE-DH-SOC-00001",
+            1u64,
+        )
+        .run();
+
+    // Authorize retirement verifier
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .typed(mrv_gsoc_registry::gsoc_registry_proxy::GsocRegistryProxy)
+        .add_verifier(VERIFIER)
         .run();
 
     // Retire
     world
         .tx()
-        .from(OWNER)
+        .from(VERIFIER)
         .to(SC_ADDRESS)
         .typed(mrv_gsoc_registry::gsoc_registry_proxy::GsocRegistryProxy)
         .record_retirement(serial, "Acme Corp", OWNER, "tx:0xabc")
@@ -97,7 +115,7 @@ fn gsoc_registry_cancel_reservation_rs() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(mrv_gsoc_registry::gsoc_registry_proxy::GsocRegistryProxy)
         .reserve_serial(serial)
@@ -105,7 +123,7 @@ fn gsoc_registry_cancel_reservation_rs() {
 
     world
         .tx()
-        .from(OWNER)
+        .from(GOVERNANCE)
         .to(SC_ADDRESS)
         .typed(mrv_gsoc_registry::gsoc_registry_proxy::GsocRegistryProxy)
         .cancel_reservation(serial)

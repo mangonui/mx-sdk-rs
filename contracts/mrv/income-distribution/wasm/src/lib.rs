@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           15
+// Endpoints:                           19
 // Async Callback (empty):               1
-// Total number of exported functions:  18
+// Total number of exported functions:  22
 
 #![no_std]
 
@@ -20,6 +20,8 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         upgrade => upgrade
+        setGovernanceReadAddress => set_governance_read_address
+        clearGovernanceReadAddress => clear_governance_read_address
         fundDistribution => fund_distribution
         claimYield => claim_yield
         pauseDistribution => pause_distribution
@@ -29,6 +31,8 @@ multiversx_sc_wasm_adapter::endpoints! {
         getDistribution => get_distribution
         isClaimed => is_claimed
         getClaimWindow => get_claim_window
+        getGovernanceReadAddress => governance_read_address
+        getDistributionEscrow => distribution_escrow
         getStorageVersion => storage_version
         setGovernance => set_governance
         acceptGovernance => accept_governance

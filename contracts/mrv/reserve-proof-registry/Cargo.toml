@@ -15,7 +15,16 @@ path = "../../../framework/base"
 [dependencies.mrv-common]
 path = "../common"
 
+[dependencies.mrv-carbon-credit]
+path = "../carbon-credit"
+
+[dependencies.mrv-buffer-pool]
+path = "../buffer-pool"
+
 [dev-dependencies.multiversx-sc-scenario]
 version = "0.65.0"
 features = ["wasmer-experimental"]
 path = "../../../framework/scenario"
+
+[dev-dependencies.mrv-governance]
+path = "../governance"

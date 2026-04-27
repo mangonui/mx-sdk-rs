@@ -17,12 +17,12 @@ multiversx_sc::derive_imports!();
 
 pub mod drwa_attestation_proxy;
 
-use multiversx_sc::api::HandleConstraints;
 use drwa_common::{
     DrwaCallerDomain, DrwaHolderAuditorAuthorization, DrwaSyncEnvelope, DrwaSyncOperation,
-    DrwaSyncOperationType, build_sync_hook_payload, invoke_drwa_sync_hook,
-    require_valid_token_id, serialize_sync_envelope_payload,
+    DrwaSyncOperationType, build_sync_hook_payload, invoke_drwa_sync_hook, require_valid_token_id,
+    serialize_sync_envelope_payload,
 };
+use multiversx_sc::api::HandleConstraints;
 
 /// Maximum number of block rounds during which a proposed auditor may accept
 /// the role transfer.
@@ -30,7 +30,9 @@ const PENDING_AUDITOR_ACCEPTANCE_ROUNDS: u64 = 1_000;
 
 /// Stores the latest attestation recorded for a subject and token pair.
 #[type_abi]
-#[derive(TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone)]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, ManagedVecItem, Clone, PartialEq, Eq,
+)]
 pub struct AttestationRecord<M: ManagedTypeApi> {
     pub token_id: ManagedBuffer<M>,
     pub subject: ManagedAddress<M>,
@@ -76,7 +78,8 @@ pub trait DrwaAttestation {
         let expires_at_round = self
             .blockchain()
             .get_block_round()
-            .saturating_add(PENDING_AUDITOR_ACCEPTANCE_ROUNDS);
+            .checked_add(PENDING_AUDITOR_ACCEPTANCE_ROUNDS)
+            .unwrap_or_else(|| sc_panic!("auditor acceptance round overflow"));
         self.pending_auditor().set(&auditor);
         self.pending_auditor_expires_at_round()
             .set(expires_at_round);
@@ -154,6 +157,15 @@ pub trait DrwaAttestation {
         // Capture overwrite flag before replacing; event emitted after set
         // so indexers can correlate with the subsequent Recorded event.
         let is_overwrite = !self.attestation(&token_id, &subject).is_empty();
+        if is_overwrite {
+            let current = self.attestation(&token_id, &subject).get();
+            if current.attestation_type == record.attestation_type
+                && current.evidence_hash == record.evidence_hash
+                && current.approved == record.approved
+            {
+                return self.emit_sync_noop_envelope(DrwaCallerDomain::Attestation);
+            }
+        }
         self.attestation(&token_id, &subject).set(record.clone());
         if is_overwrite {
             self.drwa_attestation_overwritten_event(&token_id, &subject, &caller);
@@ -191,6 +203,10 @@ pub trait DrwaAttestation {
             !self.attestation(&token_id, &subject).is_empty(),
             "attestation does not exist"
         );
+
+        if !self.attestation(&token_id, &subject).get().approved {
+            return self.emit_sync_noop_envelope(DrwaCallerDomain::Attestation);
+        }
 
         let mut attestation_type = ManagedBuffer::new();
         self.attestation(&token_id, &subject).update(|record| {
@@ -286,7 +302,8 @@ pub trait DrwaAttestation {
         let next_version = self
             .holder_auditor_authorization_version(&token_id, &subject)
             .get()
-            + 1;
+            .checked_add(1)
+            .unwrap_or_else(|| sc_panic!("version overflow"));
         let authorization = DrwaHolderAuditorAuthorization {
             holder_auditor_authorization_version: next_version,
             auditor_authorized: approved,
@@ -315,10 +332,7 @@ pub trait DrwaAttestation {
         let caller_domain = DrwaCallerDomain::Attestation;
         let payload_hash = self
             .crypto()
-            .keccak256(serialize_sync_envelope_payload(
-                &caller_domain,
-                &operations,
-            ))
+            .keccak256(serialize_sync_envelope_payload(&caller_domain, &operations))
             .as_managed_buffer()
             .clone();
 
@@ -329,9 +343,33 @@ pub trait DrwaAttestation {
         );
 
         DrwaSyncEnvelope {
+            schema_version: drwa_common::DRWA_SYNC_ENVELOPE_SCHEMA_VERSION,
             caller_domain,
             payload_hash,
             operations,
+            pre_recovery_state_hash: ManagedBuffer::new(),
+            recovery_scope: ManagedVec::new(),
+        }
+    }
+
+    fn emit_sync_noop_envelope(
+        &self,
+        caller_domain: DrwaCallerDomain,
+    ) -> DrwaSyncEnvelope<Self::Api> {
+        let operations = ManagedVec::new();
+        let payload_hash = self
+            .crypto()
+            .keccak256(serialize_sync_envelope_payload(&caller_domain, &operations))
+            .as_managed_buffer()
+            .clone();
+
+        DrwaSyncEnvelope {
+            schema_version: drwa_common::DRWA_SYNC_ENVELOPE_SCHEMA_VERSION,
+            caller_domain,
+            payload_hash,
+            operations,
+            pre_recovery_state_hash: ManagedBuffer::new(),
+            recovery_scope: ManagedVec::new(),
         }
     }
 
