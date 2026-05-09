@@ -738,6 +738,14 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
         );
 
         require!(!verifier_did.is_zero(), "empty verifier_did");
+        // Issuance is canonical: verifier approval MUST come from governance,
+        // even if a local approved_gsoc_verifiers entry exists. The local
+        // fallback in is_gsoc_verifier_approved_via_governance_or_local is
+        // intentionally limited to the read-only `isGsocVerifierApproved` view.
+        require!(
+            !self.governance_read_address().is_empty(),
+            "GSOC_VERIFIER_GOVERNANCE_READ_REQUIRED"
+        );
         require!(
             self.is_gsoc_verifier_approved_via_governance_or_local(verifier_did.clone()),
             "GSOC_VERIFIER_NOT_APPROVED"
@@ -1583,10 +1591,16 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
     fn is_gsoc_verifier_approved_via_governance_or_local(&self, verifier: ManagedAddress) -> bool {
         use governance_proxy::GovernanceProxy;
 
-        require!(
-            !self.governance_read_address().is_empty(),
-            "GSOC_VERIFIER_GOVERNANCE_READ_REQUIRED"
-        );
+        // Local-fallback path: when governanceReadAddress is not configured,
+        // honor the local approved_gsoc_verifiers registry (see
+        // `addGsocVerifier` / `removeGsocVerifier`, which mutate this set
+        // under `require_local_gsoc_verifier_registry_mode`). This matches
+        // the function-name contract ("via governance OR local") and the
+        // scenario expectation that querying before any governance setup
+        // returns `false` for an unknown verifier.
+        if self.governance_read_address().is_empty() {
+            return self.approved_gsoc_verifiers().contains(&verifier);
+        }
 
         let gas_for_query = self.blockchain().get_gas_left() / 16;
         self.tx()

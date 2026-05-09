@@ -1,5 +1,7 @@
 use mrv_buffer_pool::BufferPool;
 use mrv_carbon_credit::CarbonCreditModule;
+use mrv_common::GsocVerifierEntry;
+use mrv_governance::MrvGovernance;
 use mrv_reserve_proof_registry::ReserveProofRegistry;
 use multiversx_sc::types::{ManagedBuffer, TokenIdentifier};
 use multiversx_sc_scenario::imports::*;
@@ -11,12 +13,15 @@ const GOVERNANCE: TestAddress = TestAddress::new("governance");
 const CARBON_SC: TestSCAddress = TestSCAddress::new("mrv-carbon-credit");
 const BUFFER_SC: TestSCAddress = TestSCAddress::new("mrv-buffer-pool");
 const RESERVE_SC: TestSCAddress = TestSCAddress::new("mrv-reserve-proof");
+const GOVERNANCE_SC: TestSCAddress = TestSCAddress::new("mrv-governance");
 
 const CARBON_CODE: MxscPath =
     MxscPath::new("mxsc:../../carbon-credit/output/mrv-carbon-credit.mxsc.json");
 const BUFFER_CODE: MxscPath =
     MxscPath::new("mxsc:../../buffer-pool/output/mrv-buffer-pool.mxsc.json");
 const RESERVE_CODE: MxscPath = MxscPath::new("mxsc:output/mrv-reserve-proof-registry.mxsc.json");
+const GOVERNANCE_CODE: MxscPath =
+    MxscPath::new("mxsc:../../governance/output/mrv-governance.mxsc.json");
 
 const DVCU_TOKEN: TestTokenIdentifier = TestTokenIdentifier::new("DVCU-123456");
 const DGSC_TOKEN: TestTokenIdentifier = TestTokenIdentifier::new("DGSC-123456");
@@ -28,6 +33,7 @@ fn world() -> ScenarioWorld {
     world.register_contract(CARBON_CODE, mrv_carbon_credit::ContractBuilder);
     world.register_contract(BUFFER_CODE, mrv_buffer_pool::ContractBuilder);
     world.register_contract(RESERVE_CODE, mrv_reserve_proof_registry::ContractBuilder);
+    world.register_contract(GOVERNANCE_CODE, mrv_governance::ContractBuilder);
     world
 }
 
@@ -69,6 +75,49 @@ fn deploy_runtime(world: &mut ScenarioWorld) {
         .new_address(RESERVE_SC)
         .whitebox(mrv_reserve_proof_registry::contract_obj, |sc| {
             sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    // Deploy mrv-governance and configure carbon-credit to use it as the
+    // canonical GSOC verifier registry. issue_gsoc_credits enforces
+    // GSOC_VERIFIER_GOVERNANCE_READ_REQUIRED — verifier approval must come
+    // from this address, not from the carbon-credit-local registry. We
+    // bypass the multi-signer propose/approve/execute flow via whitebox
+    // direct insert into gsoc_verifier_registry, which is the same end
+    // state executeGsocVerifierProposal would produce.
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(GOVERNANCE_CODE)
+        .new_address(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            let mut signers = MultiValueEncoded::new();
+            signers.push(GOVERNANCE.to_managed_address());
+            sc.init(1u32, 3600u64, signers);
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(CARBON_SC)
+        .whitebox(mrv_carbon_credit::contract_obj, |sc| {
+            sc.set_governance_read_address(GOVERNANCE_SC.to_managed_address());
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(GOVERNANCE_SC)
+        .whitebox(mrv_governance::contract_obj, |sc| {
+            sc.gsoc_verifier_registry().insert(
+                GOVERNANCE.to_managed_address(),
+                GsocVerifierEntry {
+                    credentials_cid: ManagedBuffer::from(b"test-credentials"),
+                    jurisdiction: ManagedBuffer::from(b"INT"),
+                    registered_at: 0u64,
+                    approved: true,
+                },
+            );
         });
 
     world.set_esdt_local_roles(
@@ -208,7 +257,11 @@ fn reserve_proof_dvcu_and_gsoc_dual_track_rs() {
                 1u64,
                 ManagedBuffer::from(&itmo_hash[..]),
             );
-            sc.add_approved_gsoc_verifier(GOVERNANCE.to_managed_address());
+            // Verifier was already registered in mrv-governance during
+            // deploy_runtime via direct gsoc_verifier_registry insert.
+            // Local add_approved_gsoc_verifier would now revert with
+            // GSOC_VERIFIER_REGISTRY_CANONICALIZED_TO_GOVERNANCE because
+            // governance_read_address is configured.
             sc.issue_gsoc_credits(
                 ManagedBuffer::from(b"GSOC-KE-001"),
                 ManagedBuffer::from(b"pai-gsoc-int"),

@@ -49,6 +49,26 @@
         },
         {
             "step": "scCall",
+            "id": "allow-asset-token",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:mrv_atomic_swap",
+                "function": "allowAssetToken",
+                "arguments": [
+                    "str:CARBON-a1b2c3"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
             "id": "create-rfq",
             "tx": {
                 "from": "address:owner",

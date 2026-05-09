@@ -116,7 +116,7 @@
                     "str:CARBON-ab12cd",
                     "str:ESDT",
                     "str:Carbon",
-                    "str:policy-carbon-1"
+                    "str:CARBON-ab12cd"
                 ],
                 "gasLimit": "50,000,000",
                 "gasPrice": "0"
