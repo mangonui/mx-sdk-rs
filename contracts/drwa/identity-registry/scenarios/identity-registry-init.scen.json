@@ -1,0 +1,138 @@
+{
+    "name": "drwa identity registry issuer onboarding",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:issuer1": {
+                    "nonce": "0",
+                    "balance": "0"
+                },
+                "address:issuer2": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_identity_registry"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-identity-registry.mxsc.json",
+                "arguments": [
+                    "address:governance"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-issuer",
+            "tx": {
+                "from": "address:governance",
+                "to": "sc:drwa_identity_registry",
+                "function": "registerIdentity",
+                "arguments": [
+                    "address:issuer1",
+                    "str:Carbon Ventures",
+                    "str:SG",
+                    "str:REG-001",
+                    "str:SPV"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "update-compliance",
+            "tx": {
+                "from": "address:governance",
+                "to": "sc:drwa_identity_registry",
+                "function": "updateComplianceStatus",
+                "arguments": [
+                    "address:issuer1",
+                    "str:approved",
+                    "str:clear",
+                    "str:issuer",
+                    "100"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-governance-after-init",
+            "tx": {
+                "to": "sc:drwa_identity_registry",
+                "function": "getGovernance",
+                "arguments": []
+            },
+            "expect": {
+                "out": ["address:governance"],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "unauthorized-register-rejected",
+            "tx": {
+                "from": "address:issuer1",
+                "to": "sc:drwa_identity_registry",
+                "function": "registerIdentity",
+                "arguments": [
+                    "address:issuer2",
+                    "str:Bad Actor",
+                    "str:US",
+                    "str:REG-X",
+                    "str:SPV"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "str:caller not authorized",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        }
+    ]
+}

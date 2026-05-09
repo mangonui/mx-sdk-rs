@@ -32,11 +32,39 @@ impl<C: VMHooksContext> VMHooks for VMHooksDispatcher<C> {
     }
 
     fn get_sc_address(&mut self, result_offset: MemPtr) -> Result<(), VMHooksEarlyExit> {
-        panic!("Unavailable: get_sc_address");
+        self.handler
+            .use_gas(self.handler.gas_schedule().base_ops_api_cost.get_sc_address)?;
+
+        unsafe {
+            let bytes = self.handler.context.current_address().to_vec();
+            self.handler.context.memory_store(result_offset, &bytes);
+        }
+
+        Ok(())
     }
 
     fn get_owner_address(&mut self, result_offset: MemPtr) -> Result<(), VMHooksEarlyExit> {
-        panic!("Unavailable: get_owner_address");
+        self.handler.use_gas(
+            self.handler
+                .gas_schedule()
+                .base_ops_api_cost
+                .get_owner_address,
+        )?;
+
+        let owner = self
+            .handler
+            .context
+            .account_data(self.handler.context.current_address())
+            .and_then(|account| account.contract_owner)
+            .expect("contract owner address not set");
+
+        unsafe {
+            self.handler
+                .context
+                .memory_store(result_offset, &owner.to_vec());
+        }
+
+        Ok(())
     }
 
     fn get_shard_of_address(&mut self, address_offset: MemPtr) -> Result<i32, VMHooksEarlyExit> {
@@ -494,7 +522,42 @@ impl<C: VMHooksContext> VMHooks for VMHooksDispatcher<C> {
         data_offset: MemPtr,
         data_length: MemLength,
     ) -> Result<(), VMHooksEarlyExit> {
-        panic!("Unavailable: write_event_log");
+        self.handler
+            .use_gas(self.handler.gas_schedule().base_ops_api_cost.log)?;
+
+        let mut topics = Vec::with_capacity(num_topics.max(0) as usize);
+        let mut topic_data_offset = topic_offset;
+        let topic_lengths_len = ((num_topics.max(0) as usize) * 4) as MemLength;
+        let topic_lengths_bytes = unsafe {
+            self.handler
+                .context
+                .memory_load(topic_lengths_offset, topic_lengths_len)
+        };
+
+        for chunk in topic_lengths_bytes.chunks_exact(4) {
+            let topic_len = i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) as usize;
+            let topic = unsafe {
+                self.handler
+                    .context
+                    .memory_load(topic_data_offset, topic_len as MemLength)
+            };
+            topic_data_offset += topic_len as MemPtr;
+            topics.push(topic);
+        }
+
+        let data = unsafe { self.handler.context.memory_load(data_offset, data_length) };
+        let copied_len: usize = topics.iter().map(Vec::len).sum::<usize>() + data.len();
+        self.handler.use_gas_for_data_copy(copied_len)?;
+
+        self.handler
+            .context
+            .push_tx_log(crate::host::context::TxLog {
+                address: self.handler.context.current_address().clone(),
+                endpoint: self.handler.context.input_ref().func_name.clone(),
+                topics,
+                data: vec![data],
+            });
+        Ok(())
     }
 
     fn get_block_timestamp(&mut self) -> Result<i64, VMHooksEarlyExit> {
@@ -808,6 +871,15 @@ impl<C: VMHooksContext> VMHooks for VMHooksDispatcher<C> {
     ) -> Result<(), VMHooksEarlyExit> {
         self.handler
             .managed_get_back_transfers(esdt_transfer_value_handle, call_value_handle)
+    }
+
+    fn managed_drwa_sync_mirror(&mut self, payload_handle: i32) -> Result<i32, VMHooksEarlyExit> {
+        let _ = payload_handle;
+
+        // The Rust-side VM does not model native DRWA mirror sync semantics.
+        // We expose the hook so DRWA contracts can instantiate under the
+        // experimental executor for gas-smoke and upgrade-path testing.
+        Ok(RESULT_OK)
     }
 
     fn managed_async_call(
@@ -2102,7 +2174,18 @@ impl<C: VMHooksContext> VMHooks for VMHooksDispatcher<C> {
         length: MemLength,
         result_offset: MemPtr,
     ) -> Result<i32, VMHooksEarlyExit> {
-        panic!("Unavailable: keccak256")
+        self.handler
+            .use_gas(self.handler.gas_schedule().crypto_api_cost.keccak_256)?;
+
+        let data = unsafe { self.handler.context.memory_load(data_offset, length) };
+        let result = crate::crypto_functions::keccak256(&data);
+        unsafe {
+            self.handler
+                .context
+                .memory_store(result_offset, &result[..]);
+        }
+
+        Ok(RESULT_OK)
     }
 
     fn managed_keccak256(

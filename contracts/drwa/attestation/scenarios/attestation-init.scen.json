@@ -1,0 +1,84 @@
+{
+    "name": "drwa attestation approval flow",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:auditor": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_attestation"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-attestation.mxsc.json",
+                "arguments": [
+                    "address:auditor"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "record-attestation",
+            "tx": {
+                "from": "address:auditor",
+                "to": "sc:drwa_attestation",
+                "function": "recordAttestation",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:issuer1",
+                    "str:MRV",
+                    "str:hash-001",
+                    "true"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-attestation-recorded",
+            "tx": {
+                "to": "sc:drwa_attestation",
+                "function": "getAttestation",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "address:issuer1"
+                ]
+            },
+            "expect": {
+                "out": ["*"],
+                "status": "0"
+            }
+        }
+    ]
+}

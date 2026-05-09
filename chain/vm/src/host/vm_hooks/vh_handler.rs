@@ -27,17 +27,20 @@ impl<C: VMHooksContext> VMHooksHandler<C> {
     }
 
     /// Reference to the gas schedule. Provided for convenience.
-    fn gas_schedule(&self) -> &GasSchedule {
+    pub(super) fn gas_schedule(&self) -> &GasSchedule {
         self.context.gas_schedule()
     }
 
     /// Consume amount of gas. Provided for convenience.
-    fn use_gas(&mut self, gas: u64) -> Result<(), VMHooksEarlyExit> {
+    pub(super) fn use_gas(&mut self, gas: u64) -> Result<(), VMHooksEarlyExit> {
         self.context.use_gas(gas)
     }
 
     /// Shortcut for consuming gas for data copies, based on copied data length.
-    fn use_gas_for_data_copy(&mut self, num_bytes_copied: usize) -> Result<(), VMHooksEarlyExit> {
+    pub(super) fn use_gas_for_data_copy(
+        &mut self,
+        num_bytes_copied: usize,
+    ) -> Result<(), VMHooksEarlyExit> {
         self.context.use_gas(
             num_bytes_copied as u64
                 * self

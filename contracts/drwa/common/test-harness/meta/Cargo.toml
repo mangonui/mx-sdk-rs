@@ -1,0 +1,12 @@
+[package]
+name = "drwa-common-test-harness-meta"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies.drwa-common-test-harness]
+path = ".."
+
+[dependencies.multiversx-sc-meta-lib]
+version = "0.65.0"
+path = "../../../../../framework/meta-lib"

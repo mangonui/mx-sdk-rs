@@ -1,0 +1,162 @@
+{
+    "name": "drwa identity registry denial signals",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:issuer1": {
+                    "nonce": "0",
+                    "balance": "0"
+                },
+                "address:intruder": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_identity_registry"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-identity-registry.mxsc.json",
+                "arguments": [
+                    "address:governance"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-issuer",
+            "tx": {
+                "from": "address:governance",
+                "to": "sc:drwa_identity_registry",
+                "function": "registerIdentity",
+                "arguments": [
+                    "address:issuer1",
+                    "str:Carbon Ventures",
+                    "str:SG",
+                    "str:REG-001",
+                    "str:SPV"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "compliance-approved",
+            "tx": {
+                "from": "address:governance",
+                "to": "sc:drwa_identity_registry",
+                "function": "updateComplianceStatus",
+                "arguments": [
+                    "address:issuer1",
+                    "str:approved",
+                    "str:clear",
+                    "str:issuer",
+                    "100"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-governance-after-compliance-update",
+            "tx": {
+                "to": "sc:drwa_identity_registry",
+                "function": "getGovernance",
+                "arguments": []
+            },
+            "expect": {
+                "out": ["address:governance"],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "unauthorized-compliance-update",
+            "tx": {
+                "from": "address:intruder",
+                "to": "sc:drwa_identity_registry",
+                "function": "updateComplianceStatus",
+                "arguments": [
+                    "address:issuer1",
+                    "str:blocked",
+                    "str:blocked",
+                    "str:issuer",
+                    "200"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "str:caller not authorized",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "governance-can-still-update-after-rejection",
+            "tx": {
+                "from": "address:governance",
+                "to": "sc:drwa_identity_registry",
+                "function": "updateComplianceStatus",
+                "arguments": [
+                    "address:issuer1",
+                    "str:rejected",
+                    "str:clear",
+                    "str:issuer",
+                    "200"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        }
+    ]
+}

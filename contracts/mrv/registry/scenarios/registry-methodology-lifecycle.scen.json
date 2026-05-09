@@ -1,0 +1,166 @@
+{
+    "name": "registry-methodology-lifecycle",
+    "comment": "Register a methodology, update its approval status, and verify state",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "0"
+                },
+                "address:unauthorized": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:registry"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:output/mrv-registry.mxsc.json",
+                "arguments": [
+                    "address:governance"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-methodology",
+            "comment": "Owner registers a methodology (owner passes require_governance_or_owner)",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:registry",
+                "function": "registerMethodology",
+                "arguments": [
+                    "str:METH-SOC-001",
+                    "str:v1.0",
+                    "str:sha256:abc123def456",
+                    "str:approved",
+                    "1700000000",
+                    "0"
+                ],
+                "gasLimit": "30,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-methodology-idempotent",
+            "comment": "Re-registering with same fields should succeed (idempotent)",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:registry",
+                "function": "registerMethodology",
+                "arguments": [
+                    "str:METH-SOC-001",
+                    "str:v1.0",
+                    "str:sha256:abc123def456",
+                    "str:approved",
+                    "1700000000",
+                    "0"
+                ],
+                "gasLimit": "30,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "register-methodology-conflict-fails",
+            "comment": "Re-registering with different digest must revert",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:registry",
+                "function": "registerMethodology",
+                "arguments": [
+                    "str:METH-SOC-001",
+                    "str:v1.0",
+                    "str:sha256:DIFFERENT_DIGEST",
+                    "str:approved",
+                    "1700000000",
+                    "0"
+                ],
+                "gasLimit": "30,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "4",
+                "message": "str:conflicting methodology record"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "update-approval-status",
+            "comment": "Update methodology approval status to suspended",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:registry",
+                "function": "setMethodologyApprovalStatus",
+                "arguments": [
+                    "str:METH-SOC-001",
+                    "str:v1.0",
+                    "str:suspended"
+                ],
+                "gasLimit": "20,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "unauthorized-register-fails",
+            "comment": "Non-owner non-governance caller must be rejected",
+            "tx": {
+                "from": "address:unauthorized",
+                "to": "sc:registry",
+                "function": "registerMethodology",
+                "arguments": [
+                    "str:METH-NEW",
+                    "str:v1.0",
+                    "str:sha256:xyz",
+                    "str:pending",
+                    "1700000000",
+                    "0"
+                ],
+                "gasLimit": "30,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "4",
+                "message": "*"
+            }
+        }
+    ]
+}

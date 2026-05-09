@@ -1,0 +1,190 @@
+{
+    "name": "drwa policy registry denial signal states",
+    "comment": "Models canonical policy states that should downstream-materialize as DRWA denial conditions",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:other": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_policy_registry"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-policy-registry.mxsc.json",
+                "arguments": ["address:owner"],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "policy-allows-accredited-sg",
+            "comment": "Canonical state for allowed baseline",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_policy_registry",
+                "function": "setTokenPolicy",
+                "arguments": [
+                    "str:CARBON-a11001",
+                    "true",
+                    "false",
+                    "false",
+                    "false",
+                    "nested:str:ACCREDITED",
+                    "nested:str:SG"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "policy-global-pause",
+            "comment": "Downstream expectation: DRWA_TOKEN_PAUSED",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_policy_registry",
+                "function": "setTokenPolicy",
+                "arguments": [
+                    "str:CARBON-bc23de",
+                    "true",
+                    "true",
+                    "true",
+                    "true",
+                    "nested:str:ACCREDITED",
+                    "nested:str:SG"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "policy-strict-auditor-metadata-lock",
+            "comment": "Downstream expectation: DRWA_AUDITOR_REQUIRED for metadata update paths",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_policy_registry",
+                "function": "setTokenPolicy",
+                "arguments": [
+                    "str:CARBON-be7a01",
+                    "true",
+                    "false",
+                    "true",
+                    "true",
+                    "nested:str:ACCREDITED",
+                    "nested:str:SG"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-allow-policy-version",
+            "tx": {
+                "to": "sc:drwa_policy_registry",
+                "function": "getTokenPolicyVersion",
+                "arguments": ["str:CARBON-a11001"]
+            },
+            "expect": {
+                "out": ["1"],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-pause-policy-version",
+            "tx": {
+                "to": "sc:drwa_policy_registry",
+                "function": "getTokenPolicyVersion",
+                "arguments": ["str:CARBON-bc23de"]
+            },
+            "expect": {
+                "out": ["1"],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-meta-policy-version",
+            "tx": {
+                "to": "sc:drwa_policy_registry",
+                "function": "getTokenPolicyVersion",
+                "arguments": ["str:CARBON-be7a01"]
+            },
+            "expect": {
+                "out": ["1"],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "policy-unauthorized",
+            "tx": {
+                "from": "address:other",
+                "to": "sc:drwa_policy_registry",
+                "function": "setTokenPolicy",
+                "arguments": [
+                    "str:CARBON-a11001",
+                    "false",
+                    "false",
+                    "false",
+                    "false",
+                    "nested:str:RETAIL",
+                    "nested:str:US"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "str:caller not authorized",
+                "out": [],
+                "gas": "*",
+                "refund": "*"
+            }
+        }
+    ]
+}

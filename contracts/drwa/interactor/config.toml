@@ -1,0 +1,2 @@
+gateway_uri = "http://localhost:8085"
+chain_type = "simulator"

@@ -1,0 +1,27 @@
+[package]
+name = "mrv-common"
+version = "0.0.0"
+edition = "2024"
+publish = false
+authors = ["Dharitri <dev@dharitri.org>"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies.multiversx-sc]
+version = "0.65.0"
+path = "../../../framework/base"
+
+[dev-dependencies.multiversx-sc-scenario]
+version = "0.65.0"
+features = ["wasmer-experimental"]
+path = "../../../framework/scenario"
+
+[dev-dependencies.mrv-carbon-credit]
+path = "../carbon-credit"
+
+[dev-dependencies.mrv-buffer-pool]
+path = "../buffer-pool"
+
+[dev-dependencies.mrv-reserve-proof-registry]
+path = "../reserve-proof-registry"

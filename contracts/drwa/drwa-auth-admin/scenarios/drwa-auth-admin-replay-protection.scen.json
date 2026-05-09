@@ -1,0 +1,135 @@
+{
+    "name": "drwa auth admin replay protection",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:signer1": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:signer2": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:signer3": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_auth_admin"
+                }
+            ],
+            "currentBlockInfo": {
+                "blockRound": "1"
+            }
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-auth-admin.mxsc.json",
+                "arguments": [
+                    "2",
+                    "100",
+                    "address:signer1",
+                    "address:signer2",
+                    "address:signer3"
+                ],
+                "gasLimit": "80,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": [],
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "propose-update",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:drwa_auth_admin",
+                "function": "proposeUpdateCallerAddress",
+                "arguments": [
+                    "str:auth_admin",
+                    "str:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                ],
+                "gasLimit": "80,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": ["1"],
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "sign-update",
+            "tx": {
+                "from": "address:signer2",
+                "to": "sc:drwa_auth_admin",
+                "function": "sign",
+                "arguments": ["1"],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": [],
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "perform-update",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:drwa_auth_admin",
+                "function": "performAction",
+                "arguments": ["1"],
+                "gasLimit": "80,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "perform-update-again",
+            "tx": {
+                "from": "address:signer1",
+                "to": "sc:drwa_auth_admin",
+                "function": "performAction",
+                "arguments": ["1"],
+                "gasLimit": "80,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "str:action already performed",
+                "out": [],
+                "gas": "*",
+                "refund": "*"
+            }
+        }
+    ]
+}

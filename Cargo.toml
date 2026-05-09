@@ -1,6 +1,10 @@
 [workspace]
 resolver = "3"
 
+exclude = [
+  "contracts/drwa/interactor",
+]
+
 members = [
   "data/codec",
   "data/codec-derive",
@@ -32,6 +36,46 @@ members = [
   "tools/wat-gen",
 
   "contracts/modules",
+
+# NOTE (G4): contracts/drwa/interactor is excluded from the workspace because
+# its dependency paths resolve relative to its own directory. Interactor tests
+# run in CI via the chain-simulator job (mrv-ci.yml:324-327).
+  "contracts/drwa/common",
+  "contracts/drwa/common/test-harness",
+  "contracts/drwa/common/test-harness/meta",
+  "contracts/drwa/identity-registry",
+  "contracts/drwa/identity-registry/meta",
+  "contracts/drwa/policy-registry",
+  "contracts/drwa/policy-registry/meta",
+  "contracts/drwa/asset-manager",
+  "contracts/drwa/asset-manager/meta",
+  "contracts/drwa/attestation",
+  "contracts/drwa/attestation/meta",
+  "contracts/drwa/drwa-auth-admin",
+  "contracts/drwa/drwa-auth-admin/meta",
+  "contracts/mrv/common",
+  "contracts/mrv/governance",
+  "contracts/mrv/governance/meta",
+  "contracts/mrv/registry",
+  "contracts/mrv/registry/meta",
+  "contracts/mrv/aggregator",
+  "contracts/mrv/aggregator/meta",
+  "contracts/mrv/carbon-credit",
+  "contracts/mrv/carbon-credit/meta",
+  "contracts/mrv/income-distribution",
+  "contracts/mrv/income-distribution/meta",
+  "contracts/mrv/buffer-pool",
+  "contracts/mrv/buffer-pool/meta",
+  "contracts/mrv/governance-multisig",
+  "contracts/mrv/governance-multisig/meta",
+  "contracts/mrv/come-settlement",
+  "contracts/mrv/come-settlement/meta",
+  "contracts/mrv/atomic-swap",
+  "contracts/mrv/atomic-swap/meta",
+  "contracts/mrv/gsoc-registry",
+  "contracts/mrv/gsoc-registry/meta",
+  "contracts/mrv/reserve-proof-registry",
+  "contracts/mrv/reserve-proof-registry/meta",
 
   "contracts/core/price-aggregator",
   "contracts/core/price-aggregator/meta",
@@ -205,3 +249,7 @@ members = [
   # "chain/wasmer-prod", ## not included, references wasmer 2.2
   # "contracts/feature-tests/gas-tests", ## uncomment for easier development
 ]
+
+[patch.crates-io]
+multiversx-chain-vm-executor = { path = "vendor/multiversx-chain-vm-executor" }
+multiversx-chain-vm-executor-wasmer-experimental = { path = "vendor/multiversx-chain-vm-executor-wasmer-experimental" }

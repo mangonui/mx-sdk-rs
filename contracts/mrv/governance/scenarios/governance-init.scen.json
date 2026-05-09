@@ -1,0 +1,129 @@
+{
+    "name": "governance-init",
+    "comment": "Deploy governance contract with 2 signers, threshold 1, timelock 3600s and verify initial state",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:signer1": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                },
+                "address:signer2": {
+                    "nonce": "0",
+                    "balance": "1,000,000,000,000,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:governance"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:output/mrv-governance.mxsc.json",
+                "arguments": [
+                    "address:signer1",
+                    "address:signer2",
+                    "1",
+                    "3600"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "check-paused-false",
+            "tx": {
+                "to": "sc:governance",
+                "function": "getPaused",
+                "arguments": []
+            },
+            "expect": {
+                "out": [
+                    ""
+                ],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "check-threshold",
+            "tx": {
+                "to": "sc:governance",
+                "function": "getApprovalThreshold",
+                "arguments": []
+            },
+            "expect": {
+                "out": [
+                    "1"
+                ],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "check-timelock",
+            "tx": {
+                "to": "sc:governance",
+                "function": "getTimelockSeconds",
+                "arguments": []
+            },
+            "expect": {
+                "out": [
+                    "3600"
+                ],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "check-signer1-active",
+            "tx": {
+                "to": "sc:governance",
+                "function": "isSigner",
+                "arguments": [
+                    "address:signer1"
+                ]
+            },
+            "expect": {
+                "out": [
+                    "1"
+                ],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "check-signer2-active",
+            "tx": {
+                "to": "sc:governance",
+                "function": "isSigner",
+                "arguments": [
+                    "address:signer2"
+                ]
+            },
+            "expect": {
+                "out": [
+                    "1"
+                ],
+                "status": "0"
+            }
+        }
+    ]
+}

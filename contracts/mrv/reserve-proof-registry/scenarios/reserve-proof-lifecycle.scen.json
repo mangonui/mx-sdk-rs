@@ -1,0 +1,226 @@
+{
+    "name": "reserve proof registry dual-track lifecycle",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:governance": {
+                    "nonce": "0",
+                    "balance": "0"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:reserve_proof"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/mrv-reserve-proof-registry.mxsc.json",
+                "arguments": [
+                    "address:governance"
+                ],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": "*",
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "anchor-dvcu-proof",
+            "comment": "VM0042 dVCU reserve proof at block 100",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:reserve_proof",
+                "function": "anchorReserveProof",
+                "arguments": [
+                    "str:CARBON-abc123",
+                    "1000000",
+                    "100000",
+                    "50000",
+                    "0x0000000000000000000000000000000000000000000000000000000000000001",
+                    "100"
+                ],
+                "gasLimit": "10,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "anchor-dvcu-proof-block-200",
+            "comment": "Second VM0042 proof at block 200 — monotonic increment",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:reserve_proof",
+                "function": "anchorReserveProof",
+                "arguments": [
+                    "str:CARBON-abc123",
+                    "2000000",
+                    "200000",
+                    "100000",
+                    "0x0000000000000000000000000000000000000000000000000000000000000002",
+                    "200"
+                ],
+                "gasLimit": "10,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "monotonic-block-guard",
+            "comment": "Backward block (100) should fail — snapshot_block must increment",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:reserve_proof",
+                "function": "anchorReserveProof",
+                "arguments": [
+                    "str:CARBON-abc123",
+                    "2000000",
+                    "200000",
+                    "100000",
+                    "0x0000000000000000000000000000000000000000000000000000000000000003",
+                    "100"
+                ],
+                "gasLimit": "10,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "anchor-gsoc-proof",
+            "comment": "GSOC dGSC reserve proof for a separate project",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:reserve_proof",
+                "function": "anchorGsocReserveProof",
+                "arguments": [
+                    "str:GSOC-KE-001",
+                    "500",
+                    "50",
+                    "450",
+                    "0x0000000000000000000000000000000000000000000000000000000000000004",
+                    "100"
+                ],
+                "gasLimit": "10,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-nonexistent-dvcu-proof",
+            "comment": "Non-existent token returns OptionalValue::None (empty output)",
+            "tx": {
+                "to": "sc:reserve_proof",
+                "function": "getLatestReserveProof",
+                "arguments": [
+                    "str:CARBON-nonexistent"
+                ]
+            },
+            "expect": {
+                "out": []
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-nonexistent-gsoc-proof",
+            "comment": "Non-existent project returns OptionalValue::None (empty output)",
+            "tx": {
+                "to": "sc:reserve_proof",
+                "function": "getLatestGsocReserveProof",
+                "arguments": [
+                    "str:GSOC-nonexistent"
+                ]
+            },
+            "expect": {
+                "out": []
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-dvcu-proof-at-block-100",
+            "comment": "VM0042 proof at block 100 exists — getReserveProof returns non-empty OptionalValue::Some",
+            "tx": {
+                "to": "sc:reserve_proof",
+                "function": "getReserveProof",
+                "arguments": [
+                    "str:CARBON-abc123",
+                    "100"
+                ]
+            },
+            "expect": {
+                "out": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-gsoc-proof-at-block-100",
+            "comment": "GSOC proof at block 100 exists — getGsocReserveProof returns non-empty OptionalValue::Some",
+            "tx": {
+                "to": "sc:reserve_proof",
+                "function": "getGsocReserveProof",
+                "arguments": [
+                    "str:GSOC-KE-001",
+                    "100"
+                ]
+            },
+            "expect": {
+                "out": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "query-dvcu-proof-at-wrong-block",
+            "comment": "No proof was anchored at block 999 — returns OptionalValue::None (empty output)",
+            "tx": {
+                "to": "sc:reserve_proof",
+                "function": "getReserveProof",
+                "arguments": [
+                    "str:CARBON-abc123",
+                    "999"
+                ]
+            },
+            "expect": {
+                "out": []
+            }
+        }
+    ]
+}

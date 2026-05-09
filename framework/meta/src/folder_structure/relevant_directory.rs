@@ -217,3 +217,88 @@ fn find_framework_dependency(dir_path: &Path) -> Option<DependencyReference> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{DirectoryType, RelevantDirectories};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time went backwards")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("mx-sdk-rs-meta-{unique}"));
+            fs::create_dir_all(&path).expect("failed to create test workspace");
+
+            Self { path }
+        }
+
+        fn contract_dir(&self, relative_path: &str) -> PathBuf {
+            self.path.join(relative_path)
+        }
+
+        fn create_contract_layout(&self, relative_path: &str, marked_contract: bool) {
+            let contract_dir = self.contract_dir(relative_path);
+            fs::create_dir_all(contract_dir.join("meta")).expect("failed to create meta dir");
+            fs::write(
+                contract_dir.join("Cargo.toml"),
+                r#"[package]
+name = "test-contract"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+multiversx-sc = "0.65.0"
+"#,
+            )
+            .expect("failed to write Cargo.toml");
+
+            if marked_contract {
+                fs::write(
+                    contract_dir.join("multiversx.json"),
+                    "{\n  \"language\": \"rust\"\n}\n",
+                )
+                .expect("failed to write multiversx.json");
+            }
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn contains_contract_path(dirs: &RelevantDirectories, expected_path: &Path) -> bool {
+        dirs.iter_contract_crates()
+            .any(|dir| dir.dir_type == DirectoryType::Contract && dir.path == expected_path)
+    }
+
+    #[test]
+    fn find_all_marks_only_directories_with_multiversx_json_as_contracts() {
+        let workspace = TestWorkspace::new();
+        workspace.create_contract_layout("contracts/drwa/asset-manager", true);
+        workspace.create_contract_layout("contracts/drwa/common", false);
+
+        let dirs = RelevantDirectories::find_all(&workspace.path, &["target".to_string()]);
+
+        assert!(contains_contract_path(
+            &dirs,
+            &workspace.contract_dir("contracts/drwa/asset-manager")
+        ));
+        assert!(!contains_contract_path(
+            &dirs,
+            &workspace.contract_dir("contracts/drwa/common")
+        ));
+    }
+}

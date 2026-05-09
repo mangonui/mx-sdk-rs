@@ -1,0 +1,134 @@
+{
+    "name": "drwa policy registry token policy sync",
+    "steps": [
+        {
+            "step": "setState",
+            "accounts": {
+                "address:owner": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                },
+                "address:other": {
+                    "nonce": "0",
+                    "balance": "1,000,000"
+                }
+            },
+            "newAddresses": [
+                {
+                    "creatorAddress": "address:owner",
+                    "creatorNonce": "0",
+                    "newAddress": "sc:drwa_policy_registry"
+                }
+            ]
+        },
+        {
+            "step": "scDeploy",
+            "id": "deploy",
+            "tx": {
+                "from": "address:owner",
+                "contractCode": "mxsc:../output/drwa-policy-registry.mxsc.json",
+                "arguments": ["address:owner"],
+                "gasLimit": "50,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "out": [],
+                "status": "0",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "set-policy",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_policy_registry",
+                "function": "setTokenPolicy",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "true",
+                    "false",
+                    "true",
+                    "true",
+                    "nested:str:ACCREDITED",
+                    "nested:str:SG"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "set-policy-v2",
+            "tx": {
+                "from": "address:owner",
+                "to": "sc:drwa_policy_registry",
+                "function": "setTokenPolicy",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "true",
+                    "true",
+                    "true",
+                    "true",
+                    "nested:str:ACCREDITED",
+                    "nested:str:SG"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "0",
+                "out": "*",
+                "gas": "*",
+                "refund": "*"
+            }
+        },
+        {
+            "step": "scQuery",
+            "id": "verify-policy-version",
+            "tx": {
+                "to": "sc:drwa_policy_registry",
+                "function": "getTokenPolicyVersion",
+                "arguments": ["str:CARBON-ab12cd"]
+            },
+            "expect": {
+                "out": ["2"],
+                "status": "0"
+            }
+        },
+        {
+            "step": "scCall",
+            "id": "set-policy-unauthorized",
+            "tx": {
+                "from": "address:other",
+                "to": "sc:drwa_policy_registry",
+                "function": "setTokenPolicy",
+                "arguments": [
+                    "str:CARBON-ab12cd",
+                    "false",
+                    "false",
+                    "false",
+                    "false",
+                    "nested:str:RETAIL",
+                    "nested:str:US"
+                ],
+                "gasLimit": "100,000,000",
+                "gasPrice": "0"
+            },
+            "expect": {
+                "status": "4",
+                "message": "str:caller not authorized",
+                "out": [],
+                "gas": "*",
+                "refund": "*"
+            }
+        }
+    ]
+}

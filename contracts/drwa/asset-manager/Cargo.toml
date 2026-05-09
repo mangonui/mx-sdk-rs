@@ -1,0 +1,24 @@
+[package]
+name = "drwa-asset-manager"
+version = "0.0.0"
+edition = "2024"
+publish = false
+authors = ["Dharitri <dev@dharitri.org>"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies.multiversx-sc]
+version = "0.65.0"
+path = "../../../framework/base"
+
+[dependencies.drwa-common]
+path = "../common"
+
+[dependencies.drwa-policy-registry]
+path = "../policy-registry"
+
+[dev-dependencies.multiversx-sc-scenario]
+version = "0.65.0"
+features = ["wasmer-experimental"]
+path = "../../../framework/scenario"

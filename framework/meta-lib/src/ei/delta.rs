@@ -108,4 +108,6 @@ pub const EI_1_5_ADDED_NAMES: &[&str] = &[
     "mBufferToSmallIntSigned",
     "mBufferFromSmallIntUnsigned",
     "mBufferFromSmallIntSigned",
+    "managedDRWASyncMirror",
+    "managedDRWANativeGovernanceQuery",
 ];
