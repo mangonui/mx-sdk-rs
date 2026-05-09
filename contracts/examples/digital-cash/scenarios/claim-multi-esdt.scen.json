@@ -10,7 +10,7 @@
             "id": "claim2",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "claim",
                 "arguments": [
                     "0x805532043a061e0c779e4064b85193f72cffd22c5bcc208c209128e60f21bf0d",
@@ -40,7 +40,7 @@
             "id": "claim3-multi",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "claim",
                 "arguments": [
                     "0x885532043a061e0c779e4064b85193f72cffd22c5bcc208c209128e60f21bf0d",
@@ -70,7 +70,7 @@
             "id": "claim4",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "claim",
                 "arguments": [
                     "0x885532043a061e0c779e4064b85193f72cffd22c5bcc208c209128e60f21bf0d",
@@ -93,7 +93,7 @@
             "id": "claim5-multi",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "claim",
                 "arguments": [
                     "0x885532043a061e0c779e4064b85193f72cffd22c5bcc208c209128e60f21bf0d",
@@ -114,7 +114,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "3,030",
                     "esdt": {

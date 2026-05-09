@@ -10,7 +10,7 @@
             "id": "pay-fee-and-fund-egld-fail",
             "tx": {
                 "from": "address:acc3",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "esdtValue": [
                     {
                         "tokenIdentifier": "str:EGLD-000000",
@@ -43,7 +43,7 @@
             "id": "pay-fee-and-fund-egld-success",
             "tx": {
                 "from": "address:acc3",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "esdtValue": [
                     {
                         "tokenIdentifier": "str:EGLD-000000",
@@ -74,7 +74,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "1,000",
                     "storage": {

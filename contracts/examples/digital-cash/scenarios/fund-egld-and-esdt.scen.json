@@ -10,7 +10,7 @@
             "id": "fail-fund",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "1,000",
                 "function": "fund",
                 "arguments": [
@@ -34,7 +34,7 @@
             "id": "deposit-fees-1",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "1,000",
                 "function": "depositFees",
                 "arguments": [
@@ -57,7 +57,7 @@
             "id": "fund-1",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "1,000",
                 "function": "fund",
                 "arguments": [
@@ -79,7 +79,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "2,000",
                     "storage": {
@@ -129,7 +129,7 @@
             "id": "deposit-fees-2",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "1,000",
                 "function": "depositFees",
                 "arguments": [
@@ -152,7 +152,7 @@
             "id": "fund-2",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "esdtValue": [
                     {
                         "tokenIdentifier": "str:CASHTOKEN-123456",
@@ -178,7 +178,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "3,000",
                     "esdt": {
@@ -237,7 +237,7 @@
             "id": "fund-fail-3",
             "tx": {
                 "from": "address:acc3",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "esdtValue": [
                     {
                         "tokenIdentifier": "str:CASHTOKEN-112233",
@@ -273,7 +273,7 @@
             "id": "deposit-fees-3",
             "tx": {
                 "from": "address:acc3",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "1,000",
                 "function": "depositFees",
                 "arguments": [
@@ -296,7 +296,7 @@
             "id": "fund-2",
             "tx": {
                 "from": "address:acc3",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "esdtValue": [
                     {
                         "tokenIdentifier": "str:CASHTOKEN-112233",
@@ -330,7 +330,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "4,000",
                     "esdt": {

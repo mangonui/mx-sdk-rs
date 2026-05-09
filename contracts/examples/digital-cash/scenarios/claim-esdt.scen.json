@@ -10,7 +10,7 @@
             "id": "claim2",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "claim",
                 "arguments": [
                     "0x287bd4010b50c24a02018345fe5171edf4182e6294325382c75ef4c4409f01bd",
@@ -40,7 +40,7 @@
             "id": "claim3-esdt",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "claim",
                 "arguments": [
                     "0x487bd4010b50c24a02018345fe5171edf4182e6294325382c75ef4c4409f01bd",
@@ -70,7 +70,7 @@
             "id": "claim4",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "claim",
                 "arguments": [
                     "0x487bd4010b50c24a02018345fe5171edf4182e6294325382c75ef4c4409f01bd",
@@ -93,7 +93,7 @@
             "id": "claim5-esdt",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "claim",
                 "arguments": [
                     "0x487bd4010b50c24a02018345fe5171edf4182e6294325382c75ef4c4409f01bd",
@@ -114,7 +114,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "3,010",
                     "esdt": {

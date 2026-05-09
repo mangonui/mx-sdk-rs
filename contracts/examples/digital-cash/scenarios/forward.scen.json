@@ -10,7 +10,7 @@
             "id": "forward-fail",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "forward",
                 "arguments": [
                     "0xdb474a3a065d3f0c0a62ae680ef6435e48eb482899d2ae30ff7a3a4b0ef19c60",
@@ -34,7 +34,7 @@
             "id": "deposit-fees-2",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "1,000",
                 "function": "depositFees",
                 "arguments": [
@@ -57,7 +57,7 @@
             "id": "forward-without-fees-ok",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "forward",
                 "arguments": [
                     "0xdb474a3a065d3f0c0a62ae680ef6435e48eb482899d2ae30ff7a3a4b0ef19c60",
@@ -80,7 +80,7 @@
             "id": "deposit-fees-4",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "500",
                 "function": "depositFees",
                 "arguments": [
@@ -103,7 +103,7 @@
             "id": "forward-with-fees-fail",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "500",
                 "function": "forward",
                 "arguments": [
@@ -128,7 +128,7 @@
             "id": "forward-with-fees-ok",
             "tx": {
                 "from": "address:acc2",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "egldValue": "500",
                 "function": "forward",
                 "arguments": [
@@ -150,7 +150,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "4,040",
                     "esdt": {

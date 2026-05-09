@@ -10,7 +10,7 @@
             "id": "withdraw-egld-fail-1",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "withdrawExpired",
                 "arguments": [
                     "0xdb474a3a065d3f0c0a62ae680ef6435e48eb482899d2ae30ff7a3a4b0ef19c60"
@@ -30,7 +30,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "4,000",
                     "esdt": {
@@ -98,7 +98,7 @@
             "id": "withdraw-egld-fail-2",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "withdrawExpired",
                 "arguments": [
                     "0x558fd9b0dd9fed2d3bed883d3b92907743362c56b9728392f84b261f1cc5ae0a"
@@ -127,7 +127,7 @@
             "id": "withdraw-egld-success",
             "tx": {
                 "from": "address:acc1",
-                "to": "sc:the_digital_cash_contract",
+                "to": "sc:digital_cash_contract",
                 "function": "withdrawExpired",
                 "arguments": [
                     "0xdb474a3a065d3f0c0a62ae680ef6435e48eb482899d2ae30ff7a3a4b0ef19c60"
@@ -147,7 +147,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "2,000",
                     "esdt": {

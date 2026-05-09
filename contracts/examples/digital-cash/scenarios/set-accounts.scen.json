@@ -33,7 +33,7 @@
                 {
                     "creatorAddress": "address:digital_cash_owner_address",
                     "creatorNonce": "0",
-                    "newAddress": "sc:the_digital_cash_contract"
+                    "newAddress": "sc:digital_cash_contract"
                 }
             ]
         },
@@ -61,7 +61,7 @@
         {
             "step": "checkState",
             "accounts": {
-                "sc:the_digital_cash_contract": {
+                "sc:digital_cash_contract": {
                     "nonce": "0",
                     "balance": "0",
                     "storage": {
