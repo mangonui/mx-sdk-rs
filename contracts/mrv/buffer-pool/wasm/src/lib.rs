@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           15
+// Endpoints:                           22
 // Async Callback (empty):               1
-// Total number of exported functions:  18
+// Total number of exported functions:  25
 
 #![no_std]
 
@@ -20,12 +20,19 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         upgrade => upgrade
+        setGovernanceReadAddress => set_governance_read_address
+        clearGovernanceReadAddress => clear_governance_read_address
         setCarbonCreditAddr => set_carbon_credit_addr
+        setBufferTokenId => set_buffer_token_id
         depositBufferCredits => deposit_buffer_credits
         cancelBufferCredits => cancel_buffer_credits
         replenishBufferCredits => replenish_buffer_credits
         getBufferRecord => get_buffer_record
         getTotalPoolBalance => get_total_pool_balance
+        getGovernanceReadAddress => governance_read_address
+        getBufferTokenId => buffer_token_id
+        getTotalBufferMinted => total_buffer_minted
+        getTotalBufferBurned => total_buffer_burned
         addAuthorizedCaller => add_authorized_caller
         removeAuthorizedCaller => remove_authorized_caller
         isAuthorizedCaller => is_authorized_caller

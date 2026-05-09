@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           20
+// Endpoints:                           23
 // Async Callback (empty):               1
-// Total number of exported functions:  23
+// Total number of exported functions:  26
 
 #![no_std]
 
@@ -20,6 +20,8 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         upgrade => upgrade
+        setGovernanceReadAddress => set_governance_read_address
+        clearGovernanceReadAddress => clear_governance_read_address
         reserveSerial => reserve_serial
         registerSerialBatch => register_serial_batch
         cancelReservation => cancel_reservation
@@ -31,6 +33,7 @@ multiversx_sc_wasm_adapter::endpoints! {
         getRetirementRecord => get_retirement_record
         getProjectSerialCount => get_project_serials
         isSerialReserved => is_serial_reserved
+        getGovernanceReadAddress => governance_read_address
         addVerifier => add_verifier
         removeVerifier => remove_verifier
         isVerifier => is_verifier

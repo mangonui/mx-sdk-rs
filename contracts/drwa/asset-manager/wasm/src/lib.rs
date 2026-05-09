@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           17
+// Endpoints:                           25
 // Async Callback (empty):               1
-// Total number of exported functions:  20
+// Total number of exported functions:  28
 
 #![no_std]
 
@@ -26,8 +26,16 @@ multiversx_sc_wasm_adapter::endpoints! {
         syncHolderCompliance => sync_holder_compliance
         updateAsset => update_asset
         initiateWindDown => initiate_wind_down
+        completeWindDown => complete_wind_down
+        cancelWindDown => cancel_wind_down
         isWindDownInitiated => is_wind_down_initiated
+        getWindDownStatusCode => get_wind_down_status_code
+        getWindDownStatusRound => get_wind_down_status_round
+        getWindDownEvidenceCid => get_wind_down_evidence_cid
         getAsset => asset
+        getWindDownStatusStorage => wind_down_status
+        getWindDownStatusRoundStorage => wind_down_status_round
+        getWindDownEvidenceCidStorage => wind_down_evidence_cid
         getAssetLegalCustodyPack => asset_legal_custody_pack
         getHolderMirror => get_holder_mirror
         getPolicyRegistryAddress => policy_registry_address

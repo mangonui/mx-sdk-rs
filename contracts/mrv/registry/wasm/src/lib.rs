@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           43
+// Endpoints:                           57
 // Async Callback (empty):               1
-// Total number of exported functions:  46
+// Total number of exported functions:  60
 
 #![no_std]
 
@@ -20,6 +20,10 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         upgrade => upgrade
+        setGovernanceReadAddress => set_governance_read_address
+        clearGovernanceReadAddress => clear_governance_read_address
+        setCarbonCreditLifecycleAddress => set_carbon_credit_lifecycle_address
+        clearCarbonCreditLifecycleAddress => clear_carbon_credit_lifecycle_address
         registerMethodology => register_methodology
         setMethodologyApprovalStatus => set_methodology_approval_status
         supersedeMethodology => supersede_methodology
@@ -37,16 +41,24 @@ multiversx_sc_wasm_adapter::endpoints! {
         getReportProofBySeason => get_report_proof_by_season
         getReportIdBySeason => get_report_id_by_season
         isReportAnchored => is_report_anchored
+        getReportCanonicalId => get_report_canonical_id
+        getReportProofAmendmentCount => get_report_proof_amendment_count
+        getReportProofAmendment => get_report_proof_amendment
         getAnchoredReportsCount => get_anchored_reports_count
         getMethodologyRecord => get_methodology_record
+        getMethodologyCanonicalId => get_methodology_canonical_id
         getMethodologyRecordsCount => get_methodology_records_count
         getProjectRecord => get_project_record
+        getProjectCanonicalId => get_project_canonical_id
         getProjectRecordsCount => get_project_records_count
         getEvidenceRecord => get_evidence_record
+        getEvidenceCanonicalId => get_evidence_canonical_id
         getEvidenceRecordsCount => get_evidence_records_count
         getVerificationCase => get_verification_case
+        getVerificationCaseCanonicalId => get_verification_case_canonical_id
         getVerificationCasesCount => get_verification_cases_count
         getIssuanceLot => get_issuance_lot
+        getIssuanceLotCanonicalId => get_issuance_lot_canonical_id
         getIssuanceLotsCount => get_issuance_lots_count
         registerAccreditedVvb => register_accredited_vvb
         deregisterAccreditedVvb => deregister_accredited_vvb
@@ -57,6 +69,8 @@ multiversx_sc_wasm_adapter::endpoints! {
         getExecutionBundle => get_execution_bundle
         getVerificationStatement => get_verification_statement
         getVerificationCaseVersion => verification_case_version
+        getGovernanceReadAddress => governance_read_address
+        getCarbonCreditLifecycleAddress => carbon_credit_lifecycle_address
         getStorageVersion => storage_version
         setGovernance => set_governance
         acceptGovernance => accept_governance

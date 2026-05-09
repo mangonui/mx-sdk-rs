@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           13
+// Endpoints:                           16
 // Async Callback (empty):               1
-// Total number of exported functions:  16
+// Total number of exported functions:  19
 
 #![no_std]
 
@@ -20,6 +20,8 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         upgrade => upgrade
+        setGovernanceReadAddress => set_governance_read_address
+        clearGovernanceReadAddress => clear_governance_read_address
         createSettlement => create_settlement
         fundSettlement => fund_settlement
         executeSettlement => execute_settlement
@@ -27,6 +29,7 @@ multiversx_sc_wasm_adapter::endpoints! {
         migrateSettlements => migrate_settlements
         expireSettlement => expire_settlement
         getSettlement => get_settlement
+        getGovernanceReadAddress => governance_read_address
         getStorageVersion => storage_version
         setGovernance => set_governance
         acceptGovernance => accept_governance

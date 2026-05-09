@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                            8
+// Endpoints:                           13
 // Async Callback (empty):               1
-// Total number of exported functions:  11
+// Total number of exported functions:  16
 
 #![no_std]
 
@@ -20,6 +20,10 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         upgrade => upgrade
+        setGovernanceReadAddress => set_governance_read_address
+        clearGovernanceReadAddress => clear_governance_read_address
+        allowAssetToken => allow_asset_token
+        removeAssetToken => remove_asset_token
         createRfq => create_rfq
         depositMargin => deposit_margin
         settle => settle
@@ -27,6 +31,7 @@ multiversx_sc_wasm_adapter::endpoints! {
         cancelRfq => cancel_rfq
         getRfq => get_rfq
         getLockedBalance => get_locked_balance
+        isAssetTokenAllowed => is_asset_token_allowed
         getStorageVersion => storage_version
     )
 }

@@ -69,7 +69,7 @@ pub fn invoke_drwa_native_governance_query<M: ManagedTypeApi>(
 ) -> OptionalValue<ManagedBuffer<M>> {
     #[cfg(target_arch = "wasm32")]
     unsafe {
-        let mut result = ManagedBuffer::new();
+        let mut result: ManagedBuffer<M> = ManagedBuffer::new();
         let rc = managedDRWANativeGovernanceQuery(
             query_type,
             key.get_handle().get_raw_handle(),
