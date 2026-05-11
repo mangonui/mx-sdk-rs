@@ -156,7 +156,8 @@ pub trait MrvGovernance {
                     .blockchain()
                     .get_block_timestamp_seconds()
                     .as_u64_seconds()
-                    .saturating_add(self.timelock_seconds().get()),
+                    .checked_add(self.timelock_seconds().get())
+                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
                 executed: false,
                 executed_at_timestamp: 0u64,
             },
@@ -187,7 +188,8 @@ pub trait MrvGovernance {
                     .blockchain()
                     .get_block_timestamp_seconds()
                     .as_u64_seconds()
-                    .saturating_add(self.timelock_seconds().get()),
+                    .checked_add(self.timelock_seconds().get())
+                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
                 executed: false,
                 executed_at_timestamp: 0u64,
             },
@@ -223,7 +225,8 @@ pub trait MrvGovernance {
                     .blockchain()
                     .get_block_timestamp_seconds()
                     .as_u64_seconds()
-                    .saturating_add(self.timelock_seconds().get()),
+                    .checked_add(self.timelock_seconds().get())
+                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
                 executed: false,
                 executed_at_timestamp: 0u64,
             },
@@ -258,7 +261,8 @@ pub trait MrvGovernance {
                     .blockchain()
                     .get_block_timestamp_seconds()
                     .as_u64_seconds()
-                    .saturating_add(self.timelock_seconds().get()),
+                    .checked_add(self.timelock_seconds().get())
+                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
                 executed: false,
                 executed_at_timestamp: 0u64,
             },
@@ -286,7 +290,8 @@ pub trait MrvGovernance {
                 .blockchain()
                 .get_block_timestamp_seconds()
                 .as_u64_seconds()
-                .saturating_add(self.timelock_seconds().get()),
+                .checked_add(self.timelock_seconds().get())
+                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -323,7 +328,8 @@ pub trait MrvGovernance {
                 .blockchain()
                 .get_block_timestamp_seconds()
                 .as_u64_seconds()
-                .saturating_add(self.timelock_seconds().get()),
+                .checked_add(self.timelock_seconds().get())
+                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -359,7 +365,8 @@ pub trait MrvGovernance {
                 .blockchain()
                 .get_block_timestamp_seconds()
                 .as_u64_seconds()
-                .saturating_add(self.timelock_seconds().get()),
+                .checked_add(self.timelock_seconds().get())
+                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -426,7 +433,10 @@ pub trait MrvGovernance {
             self.blockchain()
                 .get_block_timestamp_seconds()
                 .as_u64_seconds()
-                <= proposal.eta.saturating_add(2_592_000u64),
+                <= proposal
+                .eta
+                .checked_add(2_592_000u64)
+                .unwrap_or_else(|| sc_panic!("proposal expiry window overflow")),
             "PROPOSAL_EXPIRED: must be executed within 30 days of timelock expiry"
         );
 
@@ -714,7 +724,10 @@ pub trait MrvGovernance {
         // GSOC verifier proposals expire after 30 days, matching the
         // main governance proposal expiry window.
         require!(
-            current_ts <= proposal.eta.saturating_add(2_592_000u64),
+            current_ts <= proposal
+                .eta
+                .checked_add(2_592_000u64)
+                .unwrap_or_else(|| sc_panic!("proposal expiry window overflow")),
             "GSOC_PROPOSAL_EXPIRED: must be executed within 30 days of timelock expiry"
         );
 
@@ -776,7 +789,8 @@ pub trait MrvGovernance {
                     .blockchain()
                     .get_block_timestamp_seconds()
                     .as_u64_seconds()
-                    .saturating_add(self.timelock_seconds().get()),
+                    .checked_add(self.timelock_seconds().get())
+                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
                 executed: false,
                 executed_at_timestamp: 0u64,
             },
