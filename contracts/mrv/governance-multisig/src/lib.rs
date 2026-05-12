@@ -273,8 +273,12 @@ pub trait GovernanceMultisig {
             .blockchain()
             .get_block_timestamp_seconds()
             .as_u64_seconds();
+        let dispute_expiry = dispute_check
+            .created_at
+            .checked_add(2_592_000u64)
+            .unwrap_or_else(|| sc_panic!("dispute expiry overflow"));
         require!(
-            now <= dispute_check.created_at.saturating_add(2_592_000u64),
+            now <= dispute_expiry,
             "DISPUTE_EXPIRED: disputes must be resolved within 30 days of creation"
         );
 

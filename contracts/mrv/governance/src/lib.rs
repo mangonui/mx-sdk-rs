@@ -291,7 +291,7 @@ pub trait MrvGovernance {
                 .get_block_timestamp_seconds()
                 .as_u64_seconds()
                 .checked_add(self.timelock_seconds().get())
-                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
+                .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -329,7 +329,7 @@ pub trait MrvGovernance {
                 .get_block_timestamp_seconds()
                 .as_u64_seconds()
                 .checked_add(self.timelock_seconds().get())
-                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
+                .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -366,7 +366,7 @@ pub trait MrvGovernance {
                 .get_block_timestamp_seconds()
                 .as_u64_seconds()
                 .checked_add(self.timelock_seconds().get())
-                    .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
+                .unwrap_or_else(|| sc_panic!("proposal eta overflow")),
             executed: false,
             executed_at_timestamp: 0u64,
         };
@@ -434,9 +434,9 @@ pub trait MrvGovernance {
                 .get_block_timestamp_seconds()
                 .as_u64_seconds()
                 <= proposal
-                .eta
-                .checked_add(2_592_000u64)
-                .unwrap_or_else(|| sc_panic!("proposal expiry window overflow")),
+                    .eta
+                    .checked_add(2_592_000u64)
+                    .unwrap_or_else(|| sc_panic!("proposal expiry window overflow")),
             "PROPOSAL_EXPIRED: must be executed within 30 days of timelock expiry"
         );
 
@@ -724,10 +724,11 @@ pub trait MrvGovernance {
         // GSOC verifier proposals expire after 30 days, matching the
         // main governance proposal expiry window.
         require!(
-            current_ts <= proposal
-                .eta
-                .checked_add(2_592_000u64)
-                .unwrap_or_else(|| sc_panic!("proposal expiry window overflow")),
+            current_ts
+                <= proposal
+                    .eta
+                    .checked_add(2_592_000u64)
+                    .unwrap_or_else(|| sc_panic!("proposal expiry window overflow")),
             "GSOC_PROPOSAL_EXPIRED: must be executed within 30 days of timelock expiry"
         );
 
@@ -905,10 +906,9 @@ pub trait MrvGovernance {
     }
 
     fn decode_u64_payload(&self, payload: &ManagedBuffer) -> u64 {
-        let raw = payload.to_boxed_bytes();
-        require!(raw.as_slice().len() == 8, "invalid numeric payload");
+        require!(payload.len() == 8, "invalid numeric payload");
         let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(raw.as_slice());
+        payload.load_slice(0, &mut bytes);
         u64::from_be_bytes(bytes)
     }
 
