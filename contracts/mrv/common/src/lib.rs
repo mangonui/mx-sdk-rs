@@ -56,10 +56,18 @@ pub trait MrvGovernanceModule {
                 "caller not authorized"
             );
         }
+        // checked_add over saturating_add: an unbounded clamp at
+        // u64::MAX would silently turn the acceptance-window
+        // expiration into "never expires", which violates the
+        // governance-transfer invariant. The overflow is unreachable
+        // in practice (~10^19 rounds horizon) but the project's
+        // standing arithmetic policy is checked_add with explicit
+        // panic on the impossible case.
         let expires_at_round = self
             .blockchain()
             .get_block_round()
-            .saturating_add(PENDING_GOVERNANCE_ACCEPTANCE_ROUNDS);
+            .checked_add(PENDING_GOVERNANCE_ACCEPTANCE_ROUNDS)
+            .unwrap_or_else(|| sc_panic!("block round + acceptance window overflow"));
         self.pending_governance().set(&governance);
         self.pending_governance_expires_at_round()
             .set(expires_at_round);
