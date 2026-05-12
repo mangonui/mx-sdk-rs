@@ -17,7 +17,6 @@ name = "abi-tester"
 version = "0.0.0"
 dependencies = [
  "bitflags 2.11.0",
- "drwa-common",
  "multiversx-sc",
  "multiversx-sc-meta-lib",
  "multiversx-sc-scenario",
