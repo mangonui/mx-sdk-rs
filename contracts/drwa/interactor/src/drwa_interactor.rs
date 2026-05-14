@@ -25,8 +25,7 @@ const AUTH_ADMIN_CODE: MxscPath =
 
 const DEPLOY_GAS: u64 = 100_000_000;
 const CALL_GAS: u64 = 30_000_000;
-const DRWA_SYSTEM_ACCOUNT: &str =
-    "erd1lllllllllllllllllllllllllllllllllllllllllllllllllllsckry7t";
+const DRWA_SYSTEM_ACCOUNT: &str = "erd1lllllllllllllllllllllllllllllllllllllllllllllllllllsckry7t";
 const DRWA_DOMAIN_POLICY_REGISTRY: &str = "policy_registry";
 const DRWA_DOMAIN_ASSET_MANAGER: &str = "asset_manager";
 const DRWA_DOMAIN_IDENTITY_REGISTRY: &str = "identity_registry";
@@ -62,9 +61,12 @@ impl DrwaInteractor {
         let holder_shard1_address = interactor.register_wallet(test_wallets::bob()).await;
         let holder_extra_address = interactor.register_wallet(test_wallets::dan()).await;
         let holder_extra_alt_address = interactor.register_wallet(test_wallets::eve()).await;
-        let holder_extra_cross_shard0_address = interactor.register_wallet(test_wallets::frank()).await;
-        let holder_extra_cross_shard1_address = interactor.register_wallet(test_wallets::grace()).await;
-        let holder_extra_governance_address = interactor.register_wallet(test_wallets::heidi()).await;
+        let holder_extra_cross_shard0_address =
+            interactor.register_wallet(test_wallets::frank()).await;
+        let holder_extra_cross_shard1_address =
+            interactor.register_wallet(test_wallets::grace()).await;
+        let holder_extra_governance_address =
+            interactor.register_wallet(test_wallets::heidi()).await;
 
         interactor.generate_blocks(30u64).await.unwrap();
 
@@ -220,11 +222,7 @@ impl DrwaInteractor {
     /// Set up a holder as compliant for a given token: register identity,
     /// approve KYC/AML, register the asset, sync holder compliance with
     /// transfer unlocked, and set a permissive token policy.
-    pub async fn setup_compliant_holder(
-        &mut self,
-        token_id: &str,
-        holder_address: &Bech32Address,
-    ) {
+    pub async fn setup_compliant_holder(&mut self, token_id: &str, holder_address: &Bech32Address) {
         let identity_registry = self.state.current_identity_registry_address().clone();
         let asset_manager = self.state.current_asset_manager_address().clone();
         let policy_registry = self.state.current_policy_registry_address().clone();
@@ -275,12 +273,12 @@ impl DrwaInteractor {
             .typed(drwa_policy_registry_proxy::DrwaPolicyRegistryProxy)
             .set_token_policy(
                 token_id,
-                true,               // drwa_enabled
-                false,              // global_pause
-                false,              // strict_auditor_mode
-                false,              // metadata_protection_enabled
-                empty_vec.clone(),  // allowed_investor_classes (empty = all)
-                empty_vec,          // allowed_jurisdictions (empty = all)
+                true,              // drwa_enabled
+                false,             // global_pause
+                false,             // strict_auditor_mode
+                false,             // metadata_protection_enabled
+                empty_vec.clone(), // allowed_investor_classes (empty = all)
+                empty_vec,         // allowed_jurisdictions (empty = all)
             )
             .run()
             .await;
@@ -300,14 +298,14 @@ impl DrwaInteractor {
             .sync_holder_compliance(
                 token_id,
                 holder_address.to_address(),
-                "approved",         // kyc_status
-                "clear",            // aml_status
-                "qualified",        // investor_class
-                "US",               // jurisdiction_code
-                0u64,               // expiry_round (permanent)
-                false,              // transfer_locked
-                false,              // receive_locked
-                false,              // auditor_authorized
+                "approved",  // kyc_status
+                "clear",     // aml_status
+                "qualified", // investor_class
+                "US",        // jurisdiction_code
+                0u64,        // expiry_round (permanent)
+                false,       // transfer_locked
+                false,       // receive_locked
+                false,       // auditor_authorized
             )
             .run()
             .await;
@@ -352,11 +350,7 @@ impl DrwaInteractor {
 
     /// Set up a holder as non-compliant / blocked for a given token: register
     /// identity with AML blocked, sync holder compliance with transfer locked.
-    pub async fn setup_blocked_holder(
-        &mut self,
-        token_id: &str,
-        holder_address: &Bech32Address,
-    ) {
+    pub async fn setup_blocked_holder(&mut self, token_id: &str, holder_address: &Bech32Address) {
         let identity_registry = self.state.current_identity_registry_address().clone();
         let asset_manager = self.state.current_asset_manager_address().clone();
         let policy_registry = self.state.current_policy_registry_address().clone();
@@ -433,14 +427,14 @@ impl DrwaInteractor {
             .sync_holder_compliance(
                 token_id,
                 holder_address.to_address(),
-                "approved",         // kyc_status
-                "blocked",          // aml_status
-                "none",             // investor_class
-                "XX",               // jurisdiction_code
-                0u64,               // expiry_round (permanent)
-                true,               // transfer_locked
-                true,               // receive_locked
-                false,              // auditor_authorized
+                "approved", // kyc_status
+                "blocked",  // aml_status
+                "none",     // investor_class
+                "XX",       // jurisdiction_code
+                0u64,       // expiry_round (permanent)
+                true,       // transfer_locked
+                true,       // receive_locked
+                false,      // auditor_authorized
             )
             .run()
             .await;
@@ -451,10 +445,7 @@ impl DrwaInteractor {
 
     /// Generate blocks on the chain simulator.
     pub async fn generate_blocks(&self, num_blocks: u64) {
-        self.interactor
-            .generate_blocks(num_blocks)
-            .await
-            .unwrap();
+        self.interactor.generate_blocks(num_blocks).await.unwrap();
     }
 
     /// Query the governance address from a DRWA contract.
@@ -502,8 +493,10 @@ impl DrwaInteractor {
         }
 
         self.interactor
-            .set_state(vec![SetStateAccount::from_address(system_account.to_bech32_string())
-                .with_storage(storage_pairs)])
+            .set_state(vec![
+                SetStateAccount::from_address(system_account.to_bech32_string())
+                    .with_storage(storage_pairs),
+            ])
             .await
             .expect("failed to provision DRWA authorized callers in chain simulator");
     }

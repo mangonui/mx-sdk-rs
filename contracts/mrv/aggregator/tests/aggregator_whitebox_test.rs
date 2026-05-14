@@ -1692,6 +1692,114 @@ fn aggregator_quorum_above_source_count_is_rejected_rs() {
 }
 
 #[test]
+fn aggregator_init_quorum_above_source_count_is_rejected_rs() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .returns(ExpectError(
+            4u64,
+            "quorum exceeds available oracle source count",
+        ))
+        .whitebox(mrv_aggregator::contract_obj, |sc| {
+            sc.init(4u32, 172800u64, 864000u64, 2592000u64, 3000u64);
+        });
+}
+
+#[test]
+fn aggregator_rejects_oracle_reading_for_ungranted_source_rs() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(ORACLE_ONE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(mrv_aggregator::contract_obj, |sc| {
+            sc.init(2u32, 172800u64, 864000u64, 2592000u64, 3000u64);
+        });
+
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_aggregator::contract_obj, |sc| {
+            sc.register_oracle_for_source(ORACLE_ONE.to_managed_address(), 0u8);
+            assert!(sc.is_oracle_source_authorized(ORACLE_ONE.to_managed_address(), 0u8));
+            assert!(!sc.is_oracle_source_authorized(ORACLE_ONE.to_managed_address(), 1u8));
+        });
+
+    world
+        .current_block()
+        .block_timestamp_seconds(1_710_800_000u64);
+
+    world
+        .tx()
+        .from(ORACLE_ONE)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(
+            4u64,
+            "ORACLE_SOURCE_NOT_AUTHORIZED: caller is not authorized for this source",
+        ))
+        .whitebox(mrv_aggregator::contract_obj, |sc| {
+            sc.submit_oracle_reading(
+                ManagedBuffer::from(b"pai-source-auth"),
+                1_710_600_000u64,
+                1_710_720_000u64,
+                1u8,
+                ManagedBuffer::from(b"bafysat001"),
+                1_710_710_000u64,
+                ManagedAddress::zero(),
+                ManagedBuffer::new(),
+            );
+        });
+}
+
+#[test]
+fn aggregator_source_registration_preserves_legacy_full_source_oracle_rs() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(ORACLE_ONE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(mrv_aggregator::contract_obj, |sc| {
+            sc.init(2u32, 172800u64, 864000u64, 2592000u64, 3000u64);
+        });
+
+    world
+        .tx()
+        .from(OWNER)
+        .to(SC_ADDRESS)
+        .whitebox(mrv_aggregator::contract_obj, |sc| {
+            sc.register_oracle(ORACLE_ONE.to_managed_address());
+            assert!(sc.is_oracle_source_authorized(ORACLE_ONE.to_managed_address(), 0u8));
+            assert!(sc.is_oracle_source_authorized(ORACLE_ONE.to_managed_address(), 1u8));
+            assert!(sc.is_oracle_source_authorized(ORACLE_ONE.to_managed_address(), 2u8));
+
+            sc.register_oracle_for_source(ORACLE_ONE.to_managed_address(), 0u8);
+            assert!(sc.is_oracle_source_authorized(ORACLE_ONE.to_managed_address(), 0u8));
+            assert!(sc.is_oracle_source_authorized(ORACLE_ONE.to_managed_address(), 1u8));
+            assert!(sc.is_oracle_source_authorized(ORACLE_ONE.to_managed_address(), 2u8));
+        });
+}
+
+#[test]
 fn aggregator_numeric_divergence_below_threshold_rs() {
     let mut world = world();
 

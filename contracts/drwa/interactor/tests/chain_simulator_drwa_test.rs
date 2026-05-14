@@ -13,7 +13,7 @@
 
 use drwa_attestation::drwa_attestation_proxy::DrwaAttestationProxy;
 use drwa_identity_registry::drwa_identity_registry_proxy::DrwaIdentityRegistryProxy;
-use drwa_interactor::{drwa_interactor_config::Config, DrwaInteractor};
+use drwa_interactor::{DrwaInteractor, drwa_interactor_config::Config};
 use multiversx_sc_snippets::imports::*;
 use serial_test::serial;
 
@@ -186,10 +186,7 @@ async fn cs_drwa_blocked_holder_denial() {
         .await;
 
     // The asset itself should be registered and regulated
-    assert!(
-        mirror.regulated,
-        "Asset must be registered as regulated"
-    );
+    assert!(mirror.regulated, "Asset must be registered as regulated");
 
     // Attestation is independent of transfer blocking: the auditor should
     // still be able to record an attestation for the blocked holder.
@@ -526,10 +523,7 @@ async fn cs_drwa_policy_version_tracking() {
         .run()
         .await;
 
-    assert_eq!(
-        version_2, 2u64,
-        "Policy version must be 2 after second set"
-    );
+    assert_eq!(version_2, 2u64, "Policy version must be 2 after second set");
 
     // Bonus: verify the policy struct itself reflects the updated flags
     let policy = interact
@@ -542,10 +536,7 @@ async fn cs_drwa_policy_version_tracking() {
         .run()
         .await;
 
-    assert!(
-        policy.drwa_enabled,
-        "drwa_enabled must be true"
-    );
+    assert!(policy.drwa_enabled, "drwa_enabled must be true");
     assert!(
         policy.global_pause,
         "global_pause must be true after update"

@@ -103,10 +103,7 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
             kyc_status: ManagedBuffer::from(b"pending"),
             aml_status: ManagedBuffer::from(b"pending"),
             investor_class: ManagedBuffer::new(),
-            expiry_round: self
-                .blockchain()
-                .get_block_round()
-                .saturating_add(self.default_validity_rounds().get()),
+            expiry_round: self.default_expiry_round(),
         };
 
         self.identity(&subject).set(record.clone());
@@ -154,10 +151,7 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
             kyc_status: ManagedBuffer::from(b"pending"),
             aml_status: ManagedBuffer::from(b"pending"),
             investor_class: ManagedBuffer::new(),
-            expiry_round: self
-                .blockchain()
-                .get_block_round()
-                .saturating_add(self.default_validity_rounds().get()),
+            expiry_round: self.default_expiry_round(),
         };
         let commitment = IdentityPrivacyCommitment {
             subject: subject.clone(),
@@ -219,8 +213,7 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
             "expiry_round must be in the future or 0 for permanent"
         );
         require!(
-            expiry_round == 0
-                || expiry_round <= current_round.saturating_add(self.max_validity_rounds().get()),
+            expiry_round == 0 || expiry_round <= self.max_expiry_round(current_round),
             "expiry_round exceeds maximum identity validity window"
         );
 
@@ -322,6 +315,7 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
         }
 
         self.identity(&subject).set(erased);
+        self.identity_privacy_commitment(&subject).clear();
         let envelope = self.emit_holder_mirror_delete_sync(subject.clone());
         self.drwa_identity_erased_event(&subject);
         envelope
@@ -371,6 +365,19 @@ pub trait DrwaIdentityRegistry: drwa_common::DrwaGovernanceModule {
         require!(max_rounds <= 1_000_000, "max_rounds cap exceeded");
         self.default_validity_rounds().set(default_rounds);
         self.max_validity_rounds().set(max_rounds);
+    }
+
+    fn default_expiry_round(&self) -> u64 {
+        self.blockchain()
+            .get_block_round()
+            .checked_add(self.default_validity_rounds().get())
+            .unwrap_or_else(|| sc_panic!("identity expiry round overflow"))
+    }
+
+    fn max_expiry_round(&self, current_round: u64) -> u64 {
+        current_round
+            .checked_add(self.max_validity_rounds().get())
+            .unwrap_or_else(|| sc_panic!("identity max validity round overflow"))
     }
 
     /// Builds, stores, and emits the holder-profile sync payload sent to the

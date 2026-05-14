@@ -21,10 +21,18 @@ pub struct Config {
 impl Config {
     /// Deserializes config from the TOML file at `CONFIG_FILE`.
     pub fn load_config() -> Self {
-        let mut file = std::fs::File::open(CONFIG_FILE).unwrap();
+        Self::try_load_config().unwrap_or_else(|err| panic!("{err}"))
+    }
+
+    /// Fallible config loader for callers that want to surface operator-facing
+    /// diagnostics instead of panicking on malformed local state.
+    pub fn try_load_config() -> Result<Self, String> {
+        let mut file = std::fs::File::open(CONFIG_FILE)
+            .map_err(|err| format!("failed to open {CONFIG_FILE}: {err}"))?;
         let mut content = String::new();
-        file.read_to_string(&mut content).unwrap();
-        toml::from_str(&content).unwrap()
+        file.read_to_string(&mut content)
+            .map_err(|err| format!("failed to read {CONFIG_FILE}: {err}"))?;
+        toml::from_str(&content).map_err(|err| format!("failed to parse {CONFIG_FILE}: {err}"))
     }
 
     pub fn chain_simulator_config() -> Self {

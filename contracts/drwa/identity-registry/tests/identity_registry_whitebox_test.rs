@@ -576,6 +576,57 @@ fn identity_registry_erase_identity_emits_holder_mirror_delete_sync() {
 }
 
 #[test]
+fn identity_registry_erase_identity_clears_privacy_commitment() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            sc.register_identity_commitment(
+                ISSUER.to_managed_address(),
+                hash32(0x44),
+                ManagedBuffer::from(b"SG"),
+                ManagedBuffer::from(b"SPV"),
+            );
+            assert!(
+                !sc.identity_privacy_commitment(&ISSUER.to_managed_address())
+                    .is_empty()
+            );
+        },
+    );
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            sc.erase_identity(ISSUER.to_managed_address());
+        },
+    );
+
+    world
+        .query()
+        .to(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            assert!(
+                sc.identity_privacy_commitment(&ISSUER.to_managed_address())
+                    .is_empty()
+            );
+        });
+}
+
+#[test]
 fn identity_registry_rejects_expired_compliance_update() {
     let mut world = world();
 
@@ -709,13 +760,12 @@ fn identity_registry_upgrade_preserves_storage() {
     );
 
     // Call upgrade
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
             sc.upgrade();
-        });
+        },
+    );
 
     // Verify storage is preserved
     world
@@ -984,13 +1034,12 @@ fn identity_registry_set_validity_config_by_governance() {
         });
 
     // Governance sets new validity config.
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
             sc.set_validity_config(5_000, 50_000);
-        });
+        },
+    );
 
     // Verify the config was persisted
     world
@@ -1020,13 +1069,12 @@ fn identity_registry_set_validity_config_affects_registration_expiry() {
         });
 
     // Update validity config to a custom default
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(SC_ADDRESS)
-        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
             sc.set_validity_config(20_000, 200_000);
-        });
+        },
+    );
 
     // Register identity — expiry should use the updated default (20_000)
     world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
@@ -1049,6 +1097,88 @@ fn identity_registry_set_validity_config_affects_registration_expiry() {
             let record = sc.identity(&ISSUER.to_managed_address()).get();
             // block_round defaults to 0 in test, so expiry = 0 + 20_000
             assert_eq!(record.expiry_round, 20_000);
+        });
+}
+
+#[test]
+fn identity_registry_registration_rejects_expiry_overflow() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+    world.current_block().block_round(u64::MAX - 4);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "identity expiry round overflow"))
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.register_identity(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"Overflow Corp"),
+                ManagedBuffer::from(b"SG"),
+                ManagedBuffer::from(b"REG-OVERFLOW"),
+                ManagedBuffer::from(b"SPV"),
+            );
+        });
+}
+
+#[test]
+fn identity_registry_update_rejects_max_validity_overflow() {
+    let mut world = world();
+
+    world.account(OWNER).nonce(1).balance(1_000_000u64);
+    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(CODE_PATH)
+        .new_address(SC_ADDRESS)
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.init(GOVERNANCE.to_managed_address());
+        });
+
+    world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+        drwa_identity_registry::contract_obj,
+        |sc| {
+            sc.register_identity(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"Max Validity Corp"),
+                ManagedBuffer::from(b"SG"),
+                ManagedBuffer::from(b"REG-MAX"),
+                ManagedBuffer::from(b"SPV"),
+            );
+        },
+    );
+
+    world.current_block().block_round(u64::MAX - 4);
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(SC_ADDRESS)
+        .returns(ExpectError(4u64, "identity max validity round overflow"))
+        .whitebox(drwa_identity_registry::contract_obj, |sc| {
+            sc.update_compliance_status(
+                ISSUER.to_managed_address(),
+                ManagedBuffer::from(b"approved"),
+                ManagedBuffer::from(b"clear"),
+                ManagedBuffer::from(b"issuer"),
+                u64::MAX,
+            );
         });
 }
 

@@ -1,3 +1,4 @@
+use mrv_buffer_pool::BufferPool;
 use mrv_carbon_credit::CarbonCreditModule;
 use mrv_common::MrvGovernanceModule;
 use mrv_governance::MrvGovernance;
@@ -10,17 +11,22 @@ const BUFFER_POOL: TestAddress = TestAddress::new("buffer-pool");
 const SIGNER_ONE: TestAddress = TestAddress::new("signer-one");
 const SIGNER_TWO: TestAddress = TestAddress::new("signer-two");
 const SC_ADDRESS: TestSCAddress = TestSCAddress::new("mrv-carbon-credit");
+const BUFFER_POOL_SC_ADDRESS: TestSCAddress = TestSCAddress::new("mrv-buffer-pool");
 const CODE_PATH: MxscPath = MxscPath::new("mxsc:output/mrv-carbon-credit.mxsc.json");
+const BUFFER_POOL_CODE_PATH: MxscPath =
+    MxscPath::new("mxsc:../buffer-pool/output/mrv-buffer-pool.mxsc.json");
 const GOVERNANCE_SC_ADDRESS: TestSCAddress = TestSCAddress::new("mrv-governance");
 const GOVERNANCE_CODE_PATH: MxscPath =
     MxscPath::new("mxsc:../governance/output/mrv-governance.mxsc.json");
 const DVCU_TOKEN: TestTokenIdentifier = TestTokenIdentifier::new("DVCU-123456");
 const DGSC_TOKEN: TestTokenIdentifier = TestTokenIdentifier::new("DGSC-123456");
+const BUFFER_TOKEN: TestTokenIdentifier = TestTokenIdentifier::new("BUFR-123456");
 
 fn world() -> ScenarioWorld {
     let mut world = ScenarioWorld::new().executor_config(ExecutorConfig::full_suite());
     world.set_current_dir_from_workspace("contracts/mrv/carbon-credit");
     world.register_contract(CODE_PATH, mrv_carbon_credit::ContractBuilder);
+    world.register_contract(BUFFER_POOL_CODE_PATH, mrv_buffer_pool::ContractBuilder);
     world.register_contract(GOVERNANCE_CODE_PATH, mrv_governance::ContractBuilder);
     world
 }
@@ -492,7 +498,33 @@ fn carbon_credit_revoke_ime_record_rs() {
 fn deploy_and_register_ime(world: &mut ScenarioWorld) {
     world.account(OWNER).nonce(1).balance(1_000_000u64);
     world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
-    world.account(BUFFER_POOL).nonce(1).balance(1_000_000u64);
+
+    world
+        .tx()
+        .from(OWNER)
+        .raw_deploy()
+        .code(BUFFER_POOL_CODE_PATH)
+        .new_address(BUFFER_POOL_SC_ADDRESS)
+        .whitebox(mrv_buffer_pool::contract_obj, |sc| {
+            sc.init(
+                GOVERNANCE.to_managed_address(),
+                SC_ADDRESS.to_managed_address(),
+            );
+        });
+
+    world.set_esdt_local_roles(
+        BUFFER_POOL_SC_ADDRESS.to_address(),
+        BUFFER_TOKEN.as_bytes(),
+        &[EsdtLocalRole::Mint, EsdtLocalRole::Burn],
+    );
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(BUFFER_POOL_SC_ADDRESS)
+        .whitebox(mrv_buffer_pool::contract_obj, |sc| {
+            sc.set_buffer_token_id(TokenIdentifier::from(BUFFER_TOKEN.as_bytes()));
+        });
 
     world
         .tx()
@@ -503,7 +535,7 @@ fn deploy_and_register_ime(world: &mut ScenarioWorld) {
         .whitebox(mrv_carbon_credit::contract_obj, |sc| {
             sc.init(
                 GOVERNANCE.to_managed_address(),
-                BUFFER_POOL.to_managed_address(),
+                BUFFER_POOL_SC_ADDRESS.to_managed_address(),
             );
         });
 
@@ -708,11 +740,31 @@ fn carbon_credit_issue_credits_rs() {
             );
             assert_eq!(sc.total_dvcu_minted().get(), BigUint::from(95_000u64));
             assert_eq!(sc.total_dvcu_burned().get(), BigUint::zero());
+            assert!(!sc.pending_buffer_deposits().contains_key(&(
+                ManagedBuffer::from(b"project-010"),
+                ManagedBuffer::from(b"pai-010"),
+                mrv_common::period_key(1u64),
+            )));
+        });
+
+    world
+        .query()
+        .to(BUFFER_POOL_SC_ADDRESS)
+        .whitebox(mrv_buffer_pool::contract_obj, |sc| {
+            let record = sc
+                .get_buffer_record(ManagedBuffer::from(b"project-010"))
+                .into_option()
+                .unwrap();
+            assert_eq!(record.total_deposited, BigUint::from(5_000u64));
+            assert_eq!(sc.get_total_pool_balance(), BigUint::from(5_000u64));
         });
 
     world
         .check_account(OWNER)
         .esdt_balance(DVCU_TOKEN, BigUint::from(95_000u64));
+    world
+        .check_account(BUFFER_POOL_SC_ADDRESS)
+        .esdt_balance(BUFFER_TOKEN, BigUint::from(5_000u64));
 }
 
 #[test]

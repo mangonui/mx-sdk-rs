@@ -78,6 +78,10 @@ pub trait MrvAggregator: mrv_common::MrvGovernanceModule {
         divergence_threshold_bps: u64,
     ) {
         require!(quorum >= QUORUM_MIN, "quorum must be >= 2");
+        require!(
+            quorum <= MAX_ORACLE_SOURCES as u32,
+            "quorum exceeds available oracle source count"
+        );
         let effective_iot_window = if iot_window > 0 {
             iot_window
         } else {
@@ -164,6 +168,10 @@ pub trait MrvAggregator: mrv_common::MrvGovernanceModule {
         require!(
             source == SOURCE_IOT || source == SOURCE_SATELLITE || source == SOURCE_GOVT_LAB,
             "source must be 0 (IoT), 1 (Satellite), or 2 (GovtLab)"
+        );
+        require!(
+            self.is_oracle_source_authorized_internal(&caller, source),
+            "ORACLE_SOURCE_NOT_AUTHORIZED: caller is not authorized for this source"
         );
         require!(!data_cid.is_empty(), "empty data_cid");
         require!(source_timestamp > 0, "invalid source_timestamp");
@@ -369,8 +377,11 @@ pub trait MrvAggregator: mrv_common::MrvGovernanceModule {
             .as_u64_seconds();
         require!(now > period_end, "period has not ended yet");
         let timeout_window = self.govt_lab_window().get();
+        let timeout_at = period_end
+            .checked_add(timeout_window)
+            .unwrap_or_else(|| sc_panic!("timeout window overflow"));
         require!(
-            now >= period_end + timeout_window,
+            now >= timeout_at,
             "timeout window has not elapsed — wait for coherence window to expire"
         );
 
@@ -515,7 +526,8 @@ pub trait MrvAggregator: mrv_common::MrvGovernanceModule {
         self.require_governance_or_owner();
         self.require_not_paused();
         require!(!oracle.is_zero(), "oracle must not be zero");
-        self.authorized_oracles().insert(oracle);
+        self.authorized_oracles().insert(oracle.clone());
+        self.grant_all_oracle_sources(&oracle);
     }
 
     /// Removes an address from the authorized oracle set.
@@ -524,11 +536,55 @@ pub trait MrvAggregator: mrv_common::MrvGovernanceModule {
         self.require_governance_or_owner();
         self.require_not_paused();
         self.authorized_oracles().swap_remove(&oracle);
+        self.revoke_all_oracle_sources(&oracle);
     }
 
     #[view(isOracleAuthorized)]
     fn is_oracle_authorized(&self, oracle: ManagedAddress) -> bool {
         self.authorized_oracles().contains(&oracle)
+    }
+
+    /// Grants one source type to an oracle. This allows governance to use
+    /// least-privilege oracle identities instead of treating every registered
+    /// oracle as valid for IoT, satellite, and government lab evidence.
+    ///
+    /// Upgrade note: an oracle present in the legacy `authorized_oracles` set
+    /// with no source rows is materialized to all known sources before applying
+    /// a source-specific change. This preserves pre-upgrade reachability while
+    /// making subsequent revocation explicit and auditable per source.
+    #[endpoint(registerOracleForSource)]
+    fn register_oracle_for_source(&self, oracle: ManagedAddress, source: u8) {
+        self.require_governance_or_owner();
+        self.require_not_paused();
+        require!(!oracle.is_zero(), "oracle must not be zero");
+        self.require_valid_source(source);
+        if self.authorized_oracles().contains(&oracle)
+            && !self.oracle_has_any_source_authorization(&oracle)
+        {
+            self.grant_all_oracle_sources(&oracle);
+        }
+        self.authorized_oracles().insert(oracle.clone());
+        self.oracle_source_authorizations()
+            .insert((oracle, source), true);
+    }
+
+    #[endpoint(revokeOracleSource)]
+    fn revoke_oracle_source(&self, oracle: ManagedAddress, source: u8) {
+        self.require_governance_or_owner();
+        self.require_not_paused();
+        self.require_valid_source(source);
+        if self.authorized_oracles().contains(&oracle)
+            && !self.oracle_has_any_source_authorization(&oracle)
+        {
+            self.grant_all_oracle_sources(&oracle);
+        }
+        self.oracle_source_authorizations()
+            .remove(&(oracle, source));
+    }
+
+    #[view(isOracleSourceAuthorized)]
+    fn is_oracle_source_authorized(&self, oracle: ManagedAddress, source: u8) -> bool {
+        self.is_oracle_source_authorized_internal(&oracle, source)
     }
 
     /// Adds an address to the authorized verifier set.
@@ -751,6 +807,64 @@ pub trait MrvAggregator: mrv_common::MrvGovernanceModule {
         );
     }
 
+    fn require_valid_source(&self, source: u8) {
+        require!(
+            source == SOURCE_IOT || source == SOURCE_SATELLITE || source == SOURCE_GOVT_LAB,
+            "source must be 0 (IoT), 1 (Satellite), or 2 (GovtLab)"
+        );
+    }
+
+    fn is_oracle_source_authorized_internal(&self, oracle: &ManagedAddress, source: u8) -> bool {
+        // Compatibility fallback: legacy authorized oracles without source rows
+        // keep full-source access until governance touches their source map.
+        self.authorized_oracles().contains(oracle)
+            && (!self.oracle_has_any_source_authorization(oracle)
+                || self
+                    .oracle_source_authorizations()
+                    .contains_key(&(oracle.clone(), source)))
+    }
+
+    fn grant_all_oracle_sources(&self, oracle: &ManagedAddress) {
+        self.oracle_source_authorizations()
+            .insert((oracle.clone(), SOURCE_IOT), true);
+        self.oracle_source_authorizations()
+            .insert((oracle.clone(), SOURCE_SATELLITE), true);
+        self.oracle_source_authorizations()
+            .insert((oracle.clone(), SOURCE_GOVT_LAB), true);
+    }
+
+    fn revoke_all_oracle_sources(&self, oracle: &ManagedAddress) {
+        self.oracle_source_authorizations()
+            .remove(&(oracle.clone(), SOURCE_IOT));
+        self.oracle_source_authorizations()
+            .remove(&(oracle.clone(), SOURCE_SATELLITE));
+        self.oracle_source_authorizations()
+            .remove(&(oracle.clone(), SOURCE_GOVT_LAB));
+    }
+
+    fn copy_oracle_sources(&self, from: &ManagedAddress, to: &ManagedAddress) {
+        if !self.oracle_has_any_source_authorization(from) {
+            return;
+        }
+        for source in [SOURCE_IOT, SOURCE_SATELLITE, SOURCE_GOVT_LAB] {
+            if self.is_oracle_source_authorized_internal(from, source) {
+                self.oracle_source_authorizations()
+                    .insert((to.clone(), source), true);
+            }
+        }
+    }
+
+    fn oracle_has_any_source_authorization(&self, oracle: &ManagedAddress) -> bool {
+        self.oracle_source_authorizations()
+            .contains_key(&(oracle.clone(), SOURCE_IOT))
+            || self
+                .oracle_source_authorizations()
+                .contains_key(&(oracle.clone(), SOURCE_SATELLITE))
+            || self
+                .oracle_source_authorizations()
+                .contains_key(&(oracle.clone(), SOURCE_GOVT_LAB))
+    }
+
     /// Legacy endpoint retained for ABI compatibility.
     ///
     /// IoT reading validation requires an Ed25519 public key, so callers must
@@ -860,6 +974,8 @@ pub trait MrvAggregator: mrv_common::MrvGovernanceModule {
 
         self.authorized_oracles().swap_remove(&current_oracle);
         self.authorized_oracles().insert(proposed_oracle.clone());
+        self.copy_oracle_sources(&current_oracle, &proposed_oracle);
+        self.revoke_all_oracle_sources(&current_oracle);
         self.pending_oracle_proposals().remove(&current_oracle);
 
         self.oracle_update_accepted_event(&current_oracle, &proposed_oracle);
@@ -937,6 +1053,9 @@ pub trait MrvAggregator: mrv_common::MrvGovernanceModule {
     /// Authorized oracle addresses.
     #[storage_mapper("authorizedOracles")]
     fn authorized_oracles(&self) -> UnorderedSetMapper<ManagedAddress>;
+
+    #[storage_mapper("oracleSourceAuthorizations")]
+    fn oracle_source_authorizations(&self) -> MapMapper<(ManagedAddress, u8), bool>;
 
     /// Authorized verifier addresses used for discrepancy acknowledgements.
     #[storage_mapper("authorizedVerifiers")]

@@ -211,18 +211,6 @@ fn mrv_carbon_credit_lifecycle() {
         500u64,
     );
 
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(CARBON_SC)
-        .whitebox(mrv_carbon_credit::contract_obj, |sc| {
-            sc.confirm_buffer_deposit(
-                ManagedBuffer::from(b"project-001"),
-                ManagedBuffer::from(b"pai-001"),
-                1u64,
-            );
-        });
-
     world.tx().from(GOVERNANCE).to(RESERVE_SC).whitebox(
         mrv_reserve_proof_registry::contract_obj,
         |sc| {
@@ -270,7 +258,7 @@ fn mrv_carbon_credit_lifecycle() {
 }
 
 #[test]
-fn mrv_confirm_buffer_deposit_atomically_deposits_and_clears_pending() {
+fn mrv_issue_credits_atomically_deposits_buffer_and_leaves_no_pending() {
     let mut world = deploy_all();
 
     issue_vm0042(
@@ -283,18 +271,6 @@ fn mrv_confirm_buffer_deposit_atomically_deposits_and_clears_pending() {
     );
 
     world
-        .tx()
-        .from(GOVERNANCE)
-        .to(CARBON_SC)
-        .whitebox(mrv_carbon_credit::contract_obj, |sc| {
-            sc.confirm_buffer_deposit(
-                ManagedBuffer::from(b"project-c13"),
-                ManagedBuffer::from(b"pai-c13"),
-                1u64,
-            );
-        });
-
-    world
         .query()
         .to(CARBON_SC)
         .whitebox(mrv_carbon_credit::contract_obj, |sc| {
@@ -305,7 +281,7 @@ fn mrv_confirm_buffer_deposit_atomically_deposits_and_clears_pending() {
             );
             assert!(
                 !sc.pending_buffer_deposits().contains_key(&key),
-                "pending buffer deposit must only clear after buffer-pool deposit succeeds"
+                "new issuance must not leave a pending buffer deposit"
             );
         });
 
@@ -326,6 +302,62 @@ fn mrv_confirm_buffer_deposit_atomically_deposits_and_clears_pending() {
 }
 
 #[test]
+fn mrv_confirm_buffer_deposit_drains_legacy_pending_state() {
+    let mut world = deploy_all();
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(CARBON_SC)
+        .whitebox(mrv_carbon_credit::contract_obj, |sc| {
+            sc.pending_buffer_deposits().insert(
+                (
+                    ManagedBuffer::from(b"project-legacy"),
+                    ManagedBuffer::from(b"pai-legacy"),
+                    mrv_common::period_key(1u64),
+                ),
+                BigUint::from(5_000u64),
+            );
+        });
+
+    world
+        .tx()
+        .from(GOVERNANCE)
+        .to(CARBON_SC)
+        .whitebox(mrv_carbon_credit::contract_obj, |sc| {
+            sc.confirm_buffer_deposit(
+                ManagedBuffer::from(b"project-legacy"),
+                ManagedBuffer::from(b"pai-legacy"),
+                1u64,
+            );
+        });
+
+    world
+        .query()
+        .to(CARBON_SC)
+        .whitebox(mrv_carbon_credit::contract_obj, |sc| {
+            assert!(!sc.pending_buffer_deposits().contains_key(&(
+                ManagedBuffer::from(b"project-legacy"),
+                ManagedBuffer::from(b"pai-legacy"),
+                mrv_common::period_key(1u64),
+            )));
+        });
+
+    world
+        .query()
+        .to(BUFFER_SC)
+        .whitebox(mrv_buffer_pool::contract_obj, |sc| {
+            let record = sc
+                .get_buffer_record(ManagedBuffer::from(b"project-legacy"))
+                .into_option()
+                .expect("legacy pending deposit must create a buffer record");
+            assert_eq!(record.total_deposited, BigUint::from(5_000u64));
+            assert_eq!(sc.total_buffer_minted().get(), BigUint::from(5_000u64));
+            assert_eq!(sc.total_pool_balance().get(), BigUint::from(5_000u64));
+        });
+}
+
+#[test]
 fn mrv_carbon_credit_retirement_and_reserve_proof_flow() {
     let mut world = deploy_all();
     let merkle_root: [u8; 32] = [0xB2u8; 32];
@@ -338,18 +370,6 @@ fn mrv_carbon_credit_retirement_and_reserve_proof_flow() {
         100_000u64,
         500u64,
     );
-
-    world
-        .tx()
-        .from(GOVERNANCE)
-        .to(CARBON_SC)
-        .whitebox(mrv_carbon_credit::contract_obj, |sc| {
-            sc.confirm_buffer_deposit(
-                ManagedBuffer::from(b"project-002"),
-                ManagedBuffer::from(b"pai-002"),
-                1u64,
-            );
-        });
 
     world
         .tx()

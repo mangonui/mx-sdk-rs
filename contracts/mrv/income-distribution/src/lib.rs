@@ -106,8 +106,11 @@ pub trait IncomeDistribution: mrv_common::MrvGovernanceModule {
         require!(!manifest_cid.is_empty(), "empty manifest_cid");
 
         let current_epoch = self.blockchain().get_block_epoch();
+        let minimum_expiry_epoch = current_epoch
+            .checked_add(MINIMUM_CLAIM_WINDOW_EPOCHS)
+            .unwrap_or_else(|| sc_panic!("expiry window overflow"));
         require!(
-            expiry_epoch >= current_epoch + MINIMUM_CLAIM_WINDOW_EPOCHS,
+            expiry_epoch >= minimum_expiry_epoch,
             "expiry_epoch must be at least MINIMUM_CLAIM_WINDOW_EPOCHS from now"
         );
 

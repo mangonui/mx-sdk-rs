@@ -22,13 +22,21 @@ impl State {
     /// Deserializes state from the TOML file at `STATE_FILE`, or returns
     /// default state if the file does not exist.
     pub fn load_state() -> Self {
+        Self::try_load_state().unwrap_or_else(|err| panic!("{err}"))
+    }
+
+    /// Fallible state loader for tests and operator tooling that want explicit
+    /// file/parse errors instead of generic unwrap panics.
+    pub fn try_load_state() -> Result<Self, String> {
         if Path::new(STATE_FILE).exists() {
-            let mut file = std::fs::File::open(STATE_FILE).unwrap();
+            let mut file = std::fs::File::open(STATE_FILE)
+                .map_err(|err| format!("failed to open {STATE_FILE}: {err}"))?;
             let mut content = String::new();
-            file.read_to_string(&mut content).unwrap();
-            toml::from_str(&content).unwrap()
+            file.read_to_string(&mut content)
+                .map_err(|err| format!("failed to read {STATE_FILE}: {err}"))?;
+            toml::from_str(&content).map_err(|err| format!("failed to parse {STATE_FILE}: {err}"))
         } else {
-            Self::default()
+            Ok(Self::default())
         }
     }
 
@@ -91,13 +99,22 @@ impl State {
             .as_ref()
             .expect("no known drwa-auth-admin contract, deploy first")
     }
+
+    pub fn try_save_state(&self) -> Result<(), String> {
+        let mut file = std::fs::File::create(STATE_FILE)
+            .map_err(|err| format!("failed to create {STATE_FILE}: {err}"))?;
+        let content = toml::to_string(self)
+            .map_err(|err| format!("failed to serialize {STATE_FILE}: {err}"))?;
+        file.write_all(content.as_bytes())
+            .map_err(|err| format!("failed to write {STATE_FILE}: {err}"))
+    }
 }
 
 impl Drop for State {
     /// Serializes state to the TOML file at `STATE_FILE` on drop.
     fn drop(&mut self) {
-        let mut file = std::fs::File::create(STATE_FILE).unwrap();
-        file.write_all(toml::to_string(self).unwrap().as_bytes())
-            .unwrap();
+        if let Err(err) = self.try_save_state() {
+            eprintln!("{err}");
+        }
     }
 }

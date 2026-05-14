@@ -224,8 +224,12 @@ pub trait BufferPool: mrv_common::MrvGovernanceModule {
         }
 
         let current_epoch = self.blockchain().get_block_epoch();
+        let next_allowed_replenishment_epoch = record
+            .last_replenishment_epoch
+            .checked_add(REPLENISHMENT_COOLDOWN_EPOCHS)
+            .unwrap_or_else(|| sc_panic!("replenishment cooldown overflow"));
         require!(
-            current_epoch >= record.last_replenishment_epoch + REPLENISHMENT_COOLDOWN_EPOCHS,
+            current_epoch >= next_allowed_replenishment_epoch,
             "replenishment rate limit: 1 per 90 days per project"
         );
 

@@ -250,13 +250,6 @@ pub trait AtomicSwap {
         );
 
         self.require_locked_balance_backed(&rfq.buyer);
-        self.send().direct_esdt(
-            &rfq.buyer,
-            &self.come_token_id().get(),
-            0u64,
-            &rfq.margin_amount,
-        );
-
         let buyer_locked = self.locked_balances(&rfq.buyer).get();
         require!(
             buyer_locked >= rfq.margin_amount,
@@ -268,6 +261,13 @@ pub trait AtomicSwap {
         self.rfqs().entry(rfq_id.clone()).and_modify(|r| {
             r.status = RFQ_EXPIRED;
         });
+
+        self.send().direct_esdt(
+            &rfq.buyer,
+            &self.come_token_id().get(),
+            0u64,
+            &rfq.margin_amount,
+        );
 
         self.margin_returned_event(&rfq_id, &rfq.margin_amount, &rfq.buyer);
     }
@@ -286,13 +286,6 @@ pub trait AtomicSwap {
         require!(caller == rfq.buyer, "only buyer can cancel");
 
         self.require_locked_balance_backed(&rfq.buyer);
-        self.send().direct_esdt(
-            &rfq.buyer,
-            &self.come_token_id().get(),
-            0u64,
-            &rfq.margin_amount,
-        );
-
         let buyer_locked = self.locked_balances(&rfq.buyer).get();
         require!(
             buyer_locked >= rfq.margin_amount,
@@ -304,6 +297,13 @@ pub trait AtomicSwap {
         self.rfqs().entry(rfq_id.clone()).and_modify(|r| {
             r.status = RFQ_CANCELLED;
         });
+
+        self.send().direct_esdt(
+            &rfq.buyer,
+            &self.come_token_id().get(),
+            0u64,
+            &rfq.margin_amount,
+        );
 
         self.margin_returned_event(&rfq_id, &rfq.margin_amount, &rfq.buyer);
     }

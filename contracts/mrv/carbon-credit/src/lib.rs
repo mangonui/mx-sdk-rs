@@ -337,6 +337,17 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
             .insert(lot_id.clone(), recipient.clone());
         self.issuance_ime_versions()
             .insert(issuance_key, ime_version);
+
+        // Reserve integrity invariant: dVCU must not exist without its
+        // non-permanence buffer contribution already materialized in the
+        // buffer-pool contract. The same-shard sync call reverts this whole
+        // issuance transaction if reserve materialization fails.
+        self.deposit_pending_buffer_contribution(
+            &project_id,
+            &buffer_contribution,
+            monitoring_period_n,
+        );
+
         let dvcu_token_id = self.require_dvcu_token_id();
         self.send()
             .esdt_local_mint(&dvcu_token_id, 0, &net_issuable);
@@ -345,16 +356,8 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
         self.total_dvcu_minted()
             .update(|total| *total += &net_issuable);
 
-        let buffer_deposit_key = (
-            project_id.clone(),
-            pai_id.clone(),
-            mrv_common::period_key(monitoring_period_n),
-        );
-        self.pending_buffer_deposits()
-            .insert(buffer_deposit_key, buffer_contribution.clone());
-
         self.credits_issued_event(&project_id, &lot_id, &pai_id, &net_issuable, &recipient);
-        self.buffer_deposit_pending_event(&project_id, &pai_id, &buffer_contribution);
+        self.buffer_deposit_confirmed_event(&project_id, &buffer_contribution);
     }
 
     /// Registers the committed execution bundle hash for a PAI and monitoring period.
@@ -429,7 +432,11 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
             revoked: false,
         };
 
-        let next_version = self.ime_record_version_count(&project_id).get() + 1u64;
+        let next_version = self
+            .ime_record_version_count(&project_id)
+            .get()
+            .checked_add(1u64)
+            .unwrap_or_else(|| sc_panic!("IME_VERSION_OVERFLOW"));
         self.ime_record_versions()
             .insert((project_id.clone(), next_version), record.clone());
         self.ime_record_version_count(&project_id).set(next_version);
@@ -439,8 +446,9 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
         self.ime_registered_event(&project_id);
     }
 
-    /// Atomically materializes a pending buffer contribution in buffer-pool
-    /// and clears the local pending state only after that call succeeds.
+    /// Legacy drain endpoint for pending buffer contributions created before
+    /// issuance became atomic. New issuances deposit into buffer-pool in the
+    /// same transaction and should not create `pendingBufferDeposits` rows.
     #[endpoint(confirmBufferDeposit)]
     fn confirm_buffer_deposit(
         &self,
@@ -810,6 +818,10 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
         );
         self.gsoc_serial_recipients()
             .insert(itmo_serial.clone(), recipient.clone());
+        // ISSUE-022: invalidate the read-through canonical-hash cache —
+        // the project's serial set just changed, so the next view call
+        // must recompute.
+        self.cached_gsoc_canonical_hash(&project_id).clear();
 
         self.gsoc_credits_issued_event(
             &project_id,
@@ -961,6 +973,11 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
 
         if new_remaining == 0u64 {
             self.gsoc_retired_serials().insert(itmo_serial.clone());
+            // ISSUE-022: invalidate cache for the project owning this
+            // serial — the serial's status flipped to "retired" in the
+            // canonical hash, so the next view must recompute. _project_id
+            // was looked up from gsoc_serial_records earlier (line 902).
+            self.cached_gsoc_canonical_hash(&_project_id).clear();
         }
 
         self.gsoc_credit_retired_event(
@@ -1121,9 +1138,10 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
         }
     }
 
-    /// Buffer-pool contract address. Pending contributions are tracked locally
-    /// and materialized by `confirmBufferDeposit` through a same-shard
-    /// buffer-pool deposit call.
+    /// Buffer-pool contract address. New issuances synchronously materialize
+    /// their non-permanence reserve before dVCU mint/transfer. The legacy
+    /// `confirmBufferDeposit` path remains only to drain pre-existing pending
+    /// contributions from older deployments.
     #[storage_mapper("bufferPoolAddr")]
     fn buffer_pool_addr(&self) -> SingleValueMapper<ManagedAddress>;
 
@@ -1176,6 +1194,21 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
     #[storage_mapper("projectGsocSerials")]
     fn project_gsoc_serials(&self, project_id: &ManagedBuffer)
     -> UnorderedSetMapper<ManagedBuffer>;
+
+    /// ISSUE-022: cached canonical GSOC serial inventory hash per project.
+    /// Set by `compute_canonical_gsoc_serial_inventory_hash` on first read,
+    /// cleared on every mutation that affects the project's serial set
+    /// (issueGsocCredits, burnAndRetireGsoc when fully retired). The
+    /// underlying compute is O(n²) due to insertion sort over serials
+    /// (ISSUE-022 narrows that algorithm to a separate refactor); the
+    /// cache narrows the practical gas-DoS reachability by ensuring
+    /// repeated VIEW reads (which workers do every cycle) don't pay
+    /// the O(n²) cost on each call.
+    #[storage_mapper("cachedGsocCanonicalHash")]
+    fn cached_gsoc_canonical_hash(
+        &self,
+        project_id: &ManagedBuffer,
+    ) -> SingleValueMapper<ManagedBuffer>;
 
     #[storage_mapper("activeImeRecord")]
     fn active_ime_record(
@@ -1238,7 +1271,8 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
     #[storage_mapper("boundBundleHashes")]
     fn bound_bundle_hashes(&self) -> MapMapper<(ManagedBuffer, ManagedBuffer), ManagedBuffer>;
 
-    /// Pending buffer contributions keyed by `(project_id, pai_id, period_key)`.
+    /// Legacy pending buffer contributions keyed by `(project_id, pai_id,
+    /// period_key)`. New issuances should not populate this mapper.
     #[storage_mapper("pendingBufferDeposits")]
     fn pending_buffer_deposits(
         &self,
@@ -1373,6 +1407,7 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
         #[indexed] recipient: &ManagedAddress,
     );
 
+    /// Legacy event retained in the ABI for older pending-deposit flows.
     #[event("bufferDepositPending")]
     fn buffer_deposit_pending_event(
         &self,
@@ -1651,7 +1686,34 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
         &self,
         project_id: &ManagedBuffer,
     ) -> ManagedBuffer {
+        // ISSUE-022: read-through cache. Workers verify the canonical
+        // hash on every cycle (often once per second per project); the
+        // cached value is only invalidated when the project's serial
+        // set actually changes, so steady-state reads are O(1) instead
+        // of O(n^2).
+        //
+        // Cache invariant: cached_gsoc_canonical_hash(project_id) is
+        // either empty (next read recomputes + populates) OR equal to
+        // the value compute_canonical_gsoc_serial_inventory_hash would
+        // return for the project's current state. Every code path that
+        // mutates the inputs to that computation (project_gsoc_serials,
+        // gsoc_serial_records, gsoc_retired_serials for serials in this
+        // project) must clear the cache before returning.
+        let cached = self.cached_gsoc_canonical_hash(project_id);
+        if !cached.is_empty() {
+            return cached.get();
+        }
+
+        // ISSUE-023: previously this function read each serial's record
+        // TWICE — once during the index-validation pass (then discarded
+        // the amount as `let _ = initial_amount`) and once again during
+        // the JSON-emit pass (to format the amount). For an inventory of
+        // N serials, that doubled the storage-read gas cost. Now: cache
+        // the amount alongside the serial during the first pass, sort the
+        // two parallel vectors in lockstep, and emit from the cached
+        // amount with no second storage read.
         let mut sorted_serials: ManagedVec<Self::Api, ManagedBuffer> = ManagedVec::new();
+        let mut sorted_amounts: ManagedVec<Self::Api, BigUint> = ManagedVec::new();
         for serial in self.project_gsoc_serials(project_id).iter() {
             let (record_project_id, _period_n, initial_amount) = self
                 .gsoc_serial_records()
@@ -1661,11 +1723,11 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
                 record_project_id == *project_id,
                 "GSOC_SERIAL_INDEX_PROJECT_MISMATCH"
             );
-            let _ = initial_amount;
             sorted_serials.push(serial);
+            sorted_amounts.push(initial_amount);
         }
 
-        self.sort_managed_buffers(&mut sorted_serials);
+        self.sort_serials_with_amounts(&mut sorted_serials, &mut sorted_amounts);
 
         let mut canonical = ManagedBuffer::new();
         canonical.append_bytes(b"[");
@@ -1674,10 +1736,7 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
                 canonical.append_bytes(b",");
             }
             let serial = sorted_serials.get(idx);
-            let (_record_project_id, _period_n, amount) = self
-                .gsoc_serial_records()
-                .get(&serial)
-                .unwrap_or_else(|| sc_panic!("GSOC_SERIAL_INDEX_CORRUPTED"));
+            let amount = sorted_amounts.get(idx);
             let is_retired = self.gsoc_retired_serials().contains(&serial);
 
             canonical.append_bytes(b"{\"serial\":\"");
@@ -1694,7 +1753,51 @@ pub trait CarbonCreditModule: mrv_common::MrvGovernanceModule {
         }
         canonical.append_bytes(b"]");
 
-        self.crypto().sha256(&canonical).as_managed_buffer().clone()
+        let hash = self.crypto().sha256(&canonical).as_managed_buffer().clone();
+        // ISSUE-022: populate the read-through cache so the next view
+        // call returns O(1) until the project's serial set mutates.
+        self.cached_gsoc_canonical_hash(project_id).set(&hash);
+        hash
+    }
+
+    // ISSUE-023: companion to compute_canonical_gsoc_serial_inventory_hash.
+    // Sorts `serials` in lex order while swapping `amounts` in lockstep so
+    // the parallel vectors stay aligned by index. Algorithm matches
+    // sort_managed_buffers (insertion sort) — same O(n^2) complexity (which
+    // ISSUE-022 separately tracks for fix), but now no per-element second
+    // storage read is needed during the canonical-JSON emit pass.
+    fn sort_serials_with_amounts(
+        &self,
+        serials: &mut ManagedVec<ManagedBuffer>,
+        amounts: &mut ManagedVec<BigUint>,
+    ) {
+        let len = serials.len();
+        for i in 1..len {
+            let mut j = i;
+            while j > 0 {
+                if self.managed_buffer_lex_gt(&serials.get(j - 1), &serials.get(j)) {
+                    let left_serial = serials.get(j - 1).clone();
+                    let right_serial = serials.get(j).clone();
+                    serials
+                        .set(j - 1, right_serial)
+                        .unwrap_or_else(|_| sc_panic!("GSOC_SERIAL_SORT_FAILED"));
+                    serials
+                        .set(j, left_serial)
+                        .unwrap_or_else(|_| sc_panic!("GSOC_SERIAL_SORT_FAILED"));
+                    let left_amount = amounts.get(j - 1).clone();
+                    let right_amount = amounts.get(j).clone();
+                    amounts
+                        .set(j - 1, right_amount)
+                        .unwrap_or_else(|_| sc_panic!("GSOC_SERIAL_SORT_FAILED"));
+                    amounts
+                        .set(j, left_amount)
+                        .unwrap_or_else(|_| sc_panic!("GSOC_SERIAL_SORT_FAILED"));
+                    j -= 1;
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     fn sort_managed_buffers(&self, values: &mut ManagedVec<ManagedBuffer>) {
