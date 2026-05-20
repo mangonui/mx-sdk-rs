@@ -63,7 +63,7 @@ pub trait GovernanceMultisig {
         require!(threshold >= MIN_SIGNERS as u32, "threshold must be >= 2");
         self.threshold().set(threshold);
 
-        let owner = self.blockchain().get_owner_address();
+        let owner = self.blockchain().get_caller();
         self.signers().insert(owner);
 
         for signer in initial_signers.into_iter() {

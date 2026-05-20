@@ -43,9 +43,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "mrv-common"
+version = "0.0.0"
+dependencies = [
+ "multiversx-sc",
+]
+
+[[package]]
 name = "mrv-governance-multisig"
 version = "0.0.0"
 dependencies = [
+ "mrv-common",
  "multiversx-sc",
 ]
 
@@ -59,7 +67,7 @@ dependencies = [
 
 [[package]]
 name = "multiversx-chain-core"
-version = "0.22.0"
+version = "0.22.1"
 dependencies = [
  "bitflags",
  "multiversx-sc-codec",
