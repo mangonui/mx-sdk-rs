@@ -125,6 +125,182 @@ fn drwa_recovery_hook_payload_serializes_governance_metadata_and_tags() {
     assert_eq!(bytes[offset], 8, "governance execute operation tag");
 }
 
+#[test]
+fn drwa_sync_hook_payload_fixtures_match_rust_builder_output() {
+    let mut v1_operations = ManagedVec::<StaticApi, DrwaSyncOperation<StaticApi>>::new();
+    v1_operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::TokenPolicy,
+        token_id: ManagedBuffer::from(b"CARBON-ab12cd"),
+        holder: ManagedAddress::zero(),
+        version: 7,
+        body: ManagedBuffer::from(br#"{"drwa_enabled":true}"#),
+    });
+
+    let v1_payload = build_sync_hook_payload(
+        &DrwaCallerDomain::PolicyRegistry,
+        &v1_operations,
+        &ManagedBuffer::<StaticApi>::from(&[0x11u8; 32]),
+    );
+    assert_eq!(
+        v1_payload.to_boxed_bytes().as_slice(),
+        decode_hex_fixture(include_str!(
+            "../testdata/drwa-sync-fixtures/sync-envelope-v1.hex"
+        ))
+        .as_slice()
+    );
+
+    let mut v2_operations = ManagedVec::<StaticApi, DrwaSyncOperation<StaticApi>>::new();
+    v2_operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::GovernanceApprove,
+        token_id: ManagedBuffer::new(),
+        holder: ManagedAddress::zero(),
+        version: 1,
+        body: ManagedBuffer::from(&[3u8; 32]),
+    });
+    v2_operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::GovernanceExecute,
+        token_id: ManagedBuffer::new(),
+        holder: ManagedAddress::zero(),
+        version: 2,
+        body: ManagedBuffer::from(&[4u8; 32]),
+    });
+
+    let mut recovery_scope = ManagedVec::<StaticApi, ManagedBuffer<StaticApi>>::new();
+    recovery_scope.push(ManagedBuffer::from(b"CARBON-ab12cd"));
+
+    let v2_payload = build_sync_hook_payload_with_recovery_metadata(
+        &DrwaCallerDomain::RecoveryAdmin,
+        &v2_operations,
+        &ManagedBuffer::<StaticApi>::from(&[5u8; 32]),
+        &ManagedBuffer::<StaticApi>::from(&[6u8; 32]),
+        &recovery_scope,
+    );
+    assert_eq!(
+        v2_payload.to_boxed_bytes().as_slice(),
+        decode_hex_fixture(include_str!(
+            "../testdata/drwa-sync-fixtures/sync-envelope-v2-recovery.hex"
+        ))
+        .as_slice()
+    );
+
+    let all_tags_payload = build_sync_hook_payload(
+        &DrwaCallerDomain::PolicyRegistry,
+        &build_all_operation_tag_fixture_operations(),
+        &ManagedBuffer::<StaticApi>::from(&[0x22u8; 32]),
+    );
+    assert_eq!(
+        all_tags_payload.to_boxed_bytes().as_slice(),
+        decode_hex_fixture(include_str!(
+            "../testdata/drwa-sync-fixtures/sync-envelope-v1-all-op-tags.hex"
+        ))
+        .as_slice()
+    );
+
+    let near_cap_payload = build_sync_hook_payload(
+        &DrwaCallerDomain::PolicyRegistry,
+        &build_near_cap_fixture_operations(),
+        &ManagedBuffer::<StaticApi>::from(&[0x07u8; 32]),
+    );
+    assert_eq!(
+        near_cap_payload.to_boxed_bytes().as_slice(),
+        decode_hex_fixture(include_str!(
+            "../testdata/drwa-sync-fixtures/sync-envelope-v1-near-cap.hex"
+        ))
+        .as_slice()
+    );
+}
+
+fn build_all_operation_tag_fixture_operations()
+-> ManagedVec<StaticApi, DrwaSyncOperation<StaticApi>> {
+    let holder = ManagedAddress::from(&[0xAAu8; 32]);
+    let mut operations = ManagedVec::<StaticApi, DrwaSyncOperation<StaticApi>>::new();
+
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::TokenPolicy,
+        token_id: ManagedBuffer::from(b"CARBON-aa0000"),
+        holder: ManagedAddress::zero(),
+        version: 1,
+        body: ManagedBuffer::from(b"TAG_0_TOKEN_POLICY"),
+    });
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::AssetRecord,
+        token_id: ManagedBuffer::from(b"CARBON-aa0001"),
+        holder: ManagedAddress::zero(),
+        version: 2,
+        body: ManagedBuffer::from(b"TAG_1_ASSET_RECORD"),
+    });
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::HolderMirror,
+        token_id: ManagedBuffer::from(b"CARBON-aa0002"),
+        holder: holder.clone(),
+        version: 3,
+        body: ManagedBuffer::from(b"TAG_2_HOLDER_MIRROR"),
+    });
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::HolderProfile,
+        token_id: ManagedBuffer::new(),
+        holder: holder.clone(),
+        version: 4,
+        body: ManagedBuffer::from(b"TAG_3_HOLDER_PROFILE"),
+    });
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::HolderAuditorAuthorization,
+        token_id: ManagedBuffer::from(b"CARBON-aa0004"),
+        holder: holder.clone(),
+        version: 5,
+        body: ManagedBuffer::from(b"TAG_4_HOLDER_AUDITOR_AUTH"),
+    });
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::HolderMirrorDelete,
+        token_id: ManagedBuffer::from(b"CARBON-aa0005"),
+        holder: holder.clone(),
+        version: 6,
+        body: ManagedBuffer::from(b"TAG_5_HOLDER_MIRROR_DELETE"),
+    });
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::AuthorizedCallerUpdate,
+        token_id: ManagedBuffer::from(b"auth_admin"),
+        holder: ManagedAddress::zero(),
+        version: 7,
+        body: ManagedBuffer::from(&[0xBBu8; 32]),
+    });
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::GovernanceApprove,
+        token_id: ManagedBuffer::new(),
+        holder: ManagedAddress::zero(),
+        version: 8,
+        body: ManagedBuffer::from(b"TAG_7_GOVERNANCE_APPROVE"),
+    });
+    operations.push(DrwaSyncOperation {
+        operation_type: DrwaSyncOperationType::GovernanceExecute,
+        token_id: ManagedBuffer::new(),
+        holder: ManagedAddress::zero(),
+        version: 9,
+        body: ManagedBuffer::from(b"TAG_8_GOVERNANCE_EXECUTE"),
+    });
+
+    operations
+}
+
+fn build_near_cap_fixture_operations() -> ManagedVec<StaticApi, DrwaSyncOperation<StaticApi>> {
+    const MAX_OPS: usize = 256;
+    const BODY_BYTES: usize = 4_029;
+
+    let mut operations = ManagedVec::<StaticApi, DrwaSyncOperation<StaticApi>>::new();
+    let body = [b'a'; BODY_BYTES];
+    for version in 1..=MAX_OPS as u64 {
+        operations.push(DrwaSyncOperation {
+            operation_type: DrwaSyncOperationType::TokenPolicy,
+            token_id: ManagedBuffer::from(b"CARBON-ab12cd"),
+            holder: ManagedAddress::zero(),
+            version,
+            body: ManagedBuffer::from(&body[..]),
+        });
+    }
+
+    operations
+}
+
 fn read_u16(bytes: &[u8], offset: &mut usize) -> u16 {
     let value = u16::from_be_bytes([bytes[*offset], bytes[*offset + 1]]);
     *offset += 2;
@@ -153,4 +329,14 @@ fn skip_operation_after_tag(bytes: &[u8], mut offset: usize) -> usize {
     offset += 8;
     skip_len_prefixed(bytes, &mut offset);
     offset
+}
+
+fn decode_hex_fixture(input: &str) -> Vec<u8> {
+    let hex: String = input.chars().filter(|ch| !ch.is_whitespace()).collect();
+    assert_eq!(hex.len() % 2, 0, "hex fixture must have full bytes");
+
+    (0..hex.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).unwrap())
+        .collect()
 }

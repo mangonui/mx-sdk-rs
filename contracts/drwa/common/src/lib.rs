@@ -34,6 +34,26 @@ pub const DRWA_NATIVE_GOVERNANCE_QUERY_PROPOSAL: i32 = 1;
 pub const DRWA_NATIVE_GOVERNANCE_QUERY_AUDIT_RECORD: i32 = 2;
 pub const DRWA_NATIVE_GOVERNANCE_QUERY_RECOVERY_LAST_BLOCK: i32 = 3;
 
+const ERR_INVALID_TOKEN_ID_EMPTY: &[u8] = b"DRWA_INVALID_TOKEN_ID: must not be empty";
+const ERR_INVALID_TOKEN_ID_TOO_SHORT: &[u8] = b"DRWA_INVALID_TOKEN_ID: is too short";
+const ERR_INVALID_TOKEN_ID_TOO_LONG: &[u8] = b"DRWA_INVALID_TOKEN_ID: is too long";
+const ERR_INVALID_TOKEN_ID_NULL_BYTES: &[u8] =
+    b"DRWA_INVALID_TOKEN_ID: must not contain null bytes";
+const ERR_INVALID_TOKEN_ID_HYPHEN_COUNT: &[u8] =
+    b"DRWA_INVALID_TOKEN_ID: must contain exactly one hyphen";
+const ERR_INVALID_TOKEN_ID_TICKER_TOO_SHORT: &[u8] = b"DRWA_INVALID_TOKEN_ID: ticker is too short";
+const ERR_INVALID_TOKEN_ID_TICKER_TOO_LONG: &[u8] =
+    b"DRWA_INVALID_TOKEN_ID: ticker is too long (max 10 chars)";
+const ERR_INVALID_TOKEN_ID_SUFFIX_LENGTH: &[u8] =
+    b"DRWA_INVALID_TOKEN_ID: suffix must be 6 characters";
+const ERR_INVALID_TOKEN_ID_TICKER_CHARS: &[u8] =
+    b"DRWA_INVALID_TOKEN_ID: ticker must be uppercase alphanumeric";
+const ERR_INVALID_TOKEN_ID_SUFFIX_CHARS: &[u8] =
+    b"DRWA_INVALID_TOKEN_ID: suffix must be lowercase hex";
+const ERR_INVALID_KYC_STATUS: &[u8] = b"DRWA_INVALID_KYC_STATUS: must be one of approved, pending, rejected, expired, not_started, deactivated";
+const ERR_INVALID_AML_STATUS: &[u8] = b"DRWA_INVALID_AML_STATUS: must be one of clear, pending, flagged, review, blocked, not_started, deactivated";
+const ERR_INVALID_STATUS_LENGTH: &[u8] = b"DRWA_INVALID_STATUS_LENGTH: must be 1-16 bytes";
+
 /// Invokes the native DRWA mirror sync hook.
 ///
 /// **Important:** On non-wasm targets (i.e. `cargo test`), this function uses
@@ -100,15 +120,15 @@ pub fn set_drwa_sync_hook_test_result(result: i32) {
 /// exactly 6 lowercase hexadecimal characters.
 pub fn require_valid_token_id<M: ManagedTypeApi>(token_id: &ManagedBuffer<M>) {
     if token_id.is_empty() {
-        M::error_api_impl().signal_error(b"token_id must not be empty");
+        M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_EMPTY);
     }
 
     let len = token_id.len();
     if len < 8 {
-        M::error_api_impl().signal_error(b"token_id is too short");
+        M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_TOO_SHORT);
     }
     if len > 17 {
-        M::error_api_impl().signal_error(b"token_id is too long");
+        M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_TOO_LONG);
     }
 
     let mut bytes = [0u8; 17];
@@ -116,32 +136,32 @@ pub fn require_valid_token_id<M: ManagedTypeApi>(token_id: &ManagedBuffer<M>) {
     let token_id_bytes = &bytes[..len];
 
     if token_id_bytes.contains(&0) {
-        M::error_api_impl().signal_error(b"token_id must not contain null bytes");
+        M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_NULL_BYTES);
     }
     let hyphen_pos = token_id_bytes
         .iter()
         .position(|b| *b == b'-')
         .unwrap_or(token_id_bytes.len());
     if token_id_bytes.iter().filter(|b| **b == b'-').count() != 1 {
-        M::error_api_impl().signal_error(b"token_id must contain exactly one hyphen");
+        M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_HYPHEN_COUNT);
     }
     if hyphen_pos < 3 {
-        M::error_api_impl().signal_error(b"token_id ticker is too short");
+        M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_TICKER_TOO_SHORT);
     }
     if hyphen_pos > 10 {
-        M::error_api_impl().signal_error(b"token_id ticker is too long (max 10 chars)");
+        M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_TICKER_TOO_LONG);
     }
     if hyphen_pos + 7 != token_id_bytes.len() {
-        M::error_api_impl().signal_error(b"token_id suffix must be 6 characters");
+        M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_SUFFIX_LENGTH);
     }
 
     for (index, byte) in token_id_bytes.iter().enumerate() {
         if index < hyphen_pos {
             if !(byte.is_ascii_uppercase() || byte.is_ascii_digit()) {
-                M::error_api_impl().signal_error(b"token_id ticker must be uppercase alphanumeric");
+                M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_TICKER_CHARS);
             }
         } else if index > hyphen_pos && !(byte.is_ascii_digit() || (b'a'..=b'f').contains(byte)) {
-            M::error_api_impl().signal_error(b"token_id suffix must be lowercase hex");
+            M::error_api_impl().signal_error(ERR_INVALID_TOKEN_ID_SUFFIX_CHARS);
         }
     }
 }
@@ -163,9 +183,7 @@ pub fn require_valid_kyc_status<M: ManagedTypeApi>(status: &ManagedBuffer<M>) {
         b"deactivated",
     ];
     if !allowed.contains(&s) {
-        M::error_api_impl().signal_error(
-            b"invalid kyc_status: must be one of approved, pending, rejected, expired, not_started, deactivated",
-        );
+        M::error_api_impl().signal_error(ERR_INVALID_KYC_STATUS);
     }
 }
 
@@ -186,15 +204,13 @@ pub fn require_valid_aml_status<M: ManagedTypeApi>(status: &ManagedBuffer<M>) {
         b"deactivated",
     ];
     if !allowed.contains(&s) {
-        M::error_api_impl().signal_error(
-            b"invalid aml_status: must be one of clear, pending, flagged, review, blocked, not_started, deactivated",
-        );
+        M::error_api_impl().signal_error(ERR_INVALID_AML_STATUS);
     }
 }
 
 fn require_status_len<M: ManagedTypeApi>(len: usize) {
     if len == 0 || len > 16 {
-        M::error_api_impl().signal_error(b"invalid status length");
+        M::error_api_impl().signal_error(ERR_INVALID_STATUS_LENGTH);
     }
 }
 

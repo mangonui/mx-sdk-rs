@@ -301,11 +301,9 @@ fn asset_manager_rejects_non_owner_and_increments_holder_version() {
         });
 
     for version in [1u64, 2u64] {
-        world
-            .tx()
-            .from(GOVERNANCE)
-            .to(SC_ADDRESS)
-            .whitebox(drwa_asset_manager::contract_obj, |sc| {
+        world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+            drwa_asset_manager::contract_obj,
+            |sc| {
                 let envelope = sc.sync_holder_compliance(
                     ManagedBuffer::from(TOKEN_ID_1),
                     HOLDER.to_managed_address(),
@@ -319,7 +317,8 @@ fn asset_manager_rejects_non_owner_and_increments_holder_version() {
                     false,
                 );
                 assert_eq!(envelope.operations.get(0).version, version);
-            });
+            },
+        );
     }
 
     world
@@ -463,7 +462,10 @@ fn asset_manager_rejects_invalid_token_id_format() {
         .tx()
         .from(GOVERNANCE)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id suffix must be 6 characters"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: suffix must be 6 characters",
+        ))
         .whitebox(drwa_asset_manager::contract_obj, |sc| {
             sc.register_asset(
                 ManagedBuffer::from(b"HOTEL-001"),

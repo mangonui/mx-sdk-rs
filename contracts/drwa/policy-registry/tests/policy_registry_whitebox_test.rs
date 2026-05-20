@@ -142,11 +142,9 @@ fn policy_registry_increments_version_and_rejects_non_owner() {
         });
 
     for version in [1u64, 2u64] {
-        world
-            .tx()
-            .from(GOVERNANCE)
-            .to(SC_ADDRESS)
-            .whitebox(drwa_policy_registry::contract_obj, |sc| {
+        world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+            drwa_policy_registry::contract_obj,
+            |sc| {
                 let mut investor_classes = ManagedVec::new();
                 investor_classes.push(ManagedBuffer::from(b"ACCREDITED"));
 
@@ -163,7 +161,8 @@ fn policy_registry_increments_version_and_rejects_non_owner() {
                     jurisdictions,
                 );
                 assert_eq!(envelope.operations.get(0).version, version);
-            });
+            },
+        );
     }
 
     world
@@ -326,7 +325,10 @@ fn policy_registry_rejects_invalid_token_id_format() {
         .tx()
         .from(GOVERNANCE)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id suffix must be 6 characters"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: suffix must be 6 characters",
+        ))
         .whitebox(drwa_policy_registry::contract_obj, |sc| {
             sc.set_token_policy(
                 ManagedBuffer::from(b"CARBON-001"),
@@ -558,7 +560,7 @@ fn assert_json_injection_rejected(
     for payload in investor_class_payloads {
         let mut world = world();
         world.account(OWNER).nonce(1).balance(1_000_000u64);
-    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+        world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
         world
             .tx()
             .from(OWNER)
@@ -596,7 +598,7 @@ fn assert_json_injection_rejected(
     for payload in jurisdiction_payloads {
         let mut world = world();
         world.account(OWNER).nonce(1).balance(1_000_000u64);
-    world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
+        world.account(GOVERNANCE).nonce(1).balance(1_000_000u64);
         world
             .tx()
             .from(OWNER)
@@ -1001,17 +1003,16 @@ fn mica_set_registration_status_valid() {
         b"withdrawn",
     ];
     for (i, status) in statuses.iter().enumerate() {
-        world
-            .tx()
-            .from(GOVERNANCE)
-            .to(SC_ADDRESS)
-            .whitebox(drwa_policy_registry::contract_obj, |sc| {
+        world.tx().from(GOVERNANCE).to(SC_ADDRESS).whitebox(
+            drwa_policy_registry::contract_obj,
+            |sc| {
                 let envelope = sc.set_registration_status(
                     ManagedBuffer::from(TOKEN_ID_1),
                     ManagedBuffer::from(*status),
                 );
                 assert_eq!(envelope.operations.get(0).version, (i as u64) + 1);
-            });
+            },
+        );
     }
 
     world

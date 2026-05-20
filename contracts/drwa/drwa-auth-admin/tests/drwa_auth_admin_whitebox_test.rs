@@ -1,5 +1,5 @@
 use drwa_auth_admin::DrwaAuthAdmin;
-use drwa_common::{DrwaCallerDomain, DrwaSyncOperationType};
+use drwa_common::{DrwaCallerDomain, DrwaSyncOperationType, set_drwa_sync_hook_test_result};
 use multiversx_sc::types::ManagedBuffer;
 use multiversx_sc_scenario::imports::*;
 
@@ -119,6 +119,81 @@ fn drwa_auth_admin_update_caller_flow() {
                 }
                 OptionalValue::None => panic!("expected sync envelope"),
             }
+        });
+
+    world
+        .query()
+        .to(ADMIN_SC)
+        .whitebox(drwa_auth_admin::contract_obj, |sc| {
+            let domain = ManagedBuffer::from(AUTH_ADMIN_DOMAIN);
+            assert_eq!(
+                sc.authorized_caller(&domain).get(),
+                ManagedBuffer::from(AUTH_ADMIN_HEX_V1)
+            );
+            assert_eq!(sc.authorized_caller_version(&domain).get(), 1);
+            assert!(sc.performed_action_ids().contains(&action_id));
+        });
+}
+
+#[test]
+fn drwa_auth_admin_sync_hook_failure_reverts_caller_update() {
+    let mut world = world();
+    deploy(&mut world);
+
+    let mut action_id = 0u64;
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(ADMIN_SC)
+        .whitebox(drwa_auth_admin::contract_obj, |sc| {
+            action_id = sc.propose_update_caller_address(
+                ManagedBuffer::from(AUTH_ADMIN_DOMAIN),
+                ManagedBuffer::from(AUTH_ADMIN_HEX_V1),
+            );
+        });
+    sign_to_reach_quorum(&mut world, action_id);
+    world.current_block().block_round(TEST_POST_TIMELOCK_ROUND);
+
+    set_drwa_sync_hook_test_result(17);
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(ADMIN_SC)
+        .returns(ExpectError(4u64, "native mirror sync failed"))
+        .whitebox(drwa_auth_admin::contract_obj, |sc| {
+            let _ = sc.perform_action(action_id);
+        });
+    set_drwa_sync_hook_test_result(0);
+
+    world
+        .query()
+        .to(ADMIN_SC)
+        .whitebox(drwa_auth_admin::contract_obj, |sc| {
+            let domain = ManagedBuffer::from(AUTH_ADMIN_DOMAIN);
+            assert!(sc.authorized_caller(&domain).is_empty());
+            assert!(sc.authorized_caller_version(&domain).is_empty());
+            assert!(!sc.performed_action_ids().contains(&action_id));
+            assert!(
+                sc.signer_pending_action_ids(&SIGNER_ONE.to_managed_address())
+                    .contains(&action_id)
+            );
+            assert!(
+                sc.signer_pending_action_ids(&SIGNER_TWO.to_managed_address())
+                    .contains(&action_id)
+            );
+            assert!(
+                sc.signer_pending_action_ids(&SIGNER_THREE.to_managed_address())
+                    .contains(&action_id)
+            );
+        });
+
+    world
+        .tx()
+        .from(SIGNER_ONE)
+        .to(ADMIN_SC)
+        .whitebox(drwa_auth_admin::contract_obj, |sc| {
+            let result = sc.perform_action(action_id);
+            assert!(matches!(result, OptionalValue::Some(_)));
         });
 
     world

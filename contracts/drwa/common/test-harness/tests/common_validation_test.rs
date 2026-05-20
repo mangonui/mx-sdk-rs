@@ -97,7 +97,10 @@ fn token_id_rejects_empty() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id must not be empty"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: must not be empty",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::new());
         });
@@ -112,7 +115,7 @@ fn token_id_rejects_too_short() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id is too short"))
+        .returns(ExpectError(4u64, "DRWA_INVALID_TOKEN_ID: is too short"))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"AB-1234"));
         });
@@ -129,7 +132,7 @@ fn token_id_rejects_no_hyphen() {
         .to(SC_ADDRESS)
         .returns(ExpectError(
             4u64,
-            "token_id must contain exactly one hyphen",
+            "DRWA_INVALID_TOKEN_ID: must contain exactly one hyphen",
         ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CARBONab12cd"));
@@ -147,7 +150,7 @@ fn token_id_rejects_multiple_hyphens() {
         .to(SC_ADDRESS)
         .returns(ExpectError(
             4u64,
-            "token_id must contain exactly one hyphen",
+            "DRWA_INVALID_TOKEN_ID: must contain exactly one hyphen",
         ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CAR-BO-ab12cd"));
@@ -163,7 +166,10 @@ fn token_id_rejects_ticker_too_short() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id ticker is too short"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: ticker is too short",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"AB-ab12cd"));
         });
@@ -178,7 +184,7 @@ fn token_id_rejects_ticker_too_long() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id is too long"))
+        .returns(ExpectError(4u64, "DRWA_INVALID_TOKEN_ID: is too long"))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"ABCDEFGHIJK-ab12cd"));
         });
@@ -193,7 +199,10 @@ fn token_id_rejects_suffix_too_short() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id suffix must be 6 characters"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: suffix must be 6 characters",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CARBON-ab12c"));
         });
@@ -208,7 +217,10 @@ fn token_id_rejects_suffix_too_long() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id suffix must be 6 characters"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: suffix must be 6 characters",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CARBON-ab12cde"));
         });
@@ -225,7 +237,7 @@ fn token_id_rejects_lowercase_ticker() {
         .to(SC_ADDRESS)
         .returns(ExpectError(
             4u64,
-            "token_id ticker must be uppercase alphanumeric",
+            "DRWA_INVALID_TOKEN_ID: ticker must be uppercase alphanumeric",
         ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"carbon-ab12cd"));
@@ -241,7 +253,10 @@ fn token_id_rejects_uppercase_suffix() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id suffix must be lowercase hex"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: suffix must be lowercase hex",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CARBON-AB12CD"));
         });
@@ -257,7 +272,10 @@ fn token_id_rejects_non_hex_suffix() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id suffix must be lowercase hex"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: suffix must be lowercase hex",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CARBON-ab12gx"));
         });
@@ -272,7 +290,10 @@ fn token_id_rejects_null_bytes() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id must not contain null bytes"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: must not contain null bytes",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CARBON\x00ab12cd"));
         });
@@ -289,7 +310,7 @@ fn token_id_rejects_special_chars_in_ticker() {
         .to(SC_ADDRESS)
         .returns(ExpectError(
             4u64,
-            "token_id ticker must be uppercase alphanumeric",
+            "DRWA_INVALID_TOKEN_ID: ticker must be uppercase alphanumeric",
         ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_token_id(ManagedBuffer::from(b"CAR!ON-ab12cd"));
@@ -333,7 +354,7 @@ fn kyc_status_rejects_unknown_value() {
         .to(SC_ADDRESS)
         .returns(ExpectError(
             4u64,
-            "invalid kyc_status: must be one of approved, pending, rejected, expired, not_started, deactivated",
+            "DRWA_INVALID_KYC_STATUS: must be one of approved, pending, rejected, expired, not_started, deactivated",
         ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_kyc_status(ManagedBuffer::from(b"unknown"));
@@ -349,7 +370,10 @@ fn kyc_status_rejects_empty() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "invalid status length"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_STATUS_LENGTH: must be 1-16 bytes",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_kyc_status(ManagedBuffer::new());
         });
@@ -367,7 +391,7 @@ fn kyc_status_rejects_case_variant() {
         .to(SC_ADDRESS)
         .returns(ExpectError(
             4u64,
-            "invalid kyc_status: must be one of approved, pending, rejected, expired, not_started, deactivated",
+            "DRWA_INVALID_KYC_STATUS: must be one of approved, pending, rejected, expired, not_started, deactivated",
         ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_kyc_status(ManagedBuffer::from(b"Approved"));
@@ -411,7 +435,7 @@ fn aml_status_rejects_unknown_value() {
         .to(SC_ADDRESS)
         .returns(ExpectError(
             4u64,
-            "invalid aml_status: must be one of clear, pending, flagged, review, blocked, not_started, deactivated",
+            "DRWA_INVALID_AML_STATUS: must be one of clear, pending, flagged, review, blocked, not_started, deactivated",
         ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_aml_status(ManagedBuffer::from(b"suspicious"));
@@ -427,7 +451,10 @@ fn aml_status_rejects_empty() {
         .tx()
         .from(OWNER)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "invalid status length"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_STATUS_LENGTH: must be 1-16 bytes",
+        ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_aml_status(ManagedBuffer::new());
         });
@@ -444,7 +471,7 @@ fn aml_status_rejects_case_variant() {
         .to(SC_ADDRESS)
         .returns(ExpectError(
             4u64,
-            "invalid aml_status: must be one of clear, pending, flagged, review, blocked, not_started, deactivated",
+            "DRWA_INVALID_AML_STATUS: must be one of clear, pending, flagged, review, blocked, not_started, deactivated",
         ))
         .whitebox(drwa_common_test_harness::contract_obj, |sc| {
             sc.validate_aml_status(ManagedBuffer::from(b"CLEAR"));

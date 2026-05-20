@@ -457,7 +457,10 @@ fn attestation_rejects_invalid_token_id_format() {
         .tx()
         .from(AUDITOR)
         .to(SC_ADDRESS)
-        .returns(ExpectError(4u64, "token_id suffix must be 6 characters"))
+        .returns(ExpectError(
+            4u64,
+            "DRWA_INVALID_TOKEN_ID: suffix must be 6 characters",
+        ))
         .whitebox(drwa_attestation::contract_obj, |sc| {
             sc.record_attestation(
                 ManagedBuffer::from(b"CARBON-001"),
