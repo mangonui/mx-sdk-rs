@@ -199,6 +199,57 @@
                 }
             ]
         },
+        "AbiEnvelope": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "domain",
+                    "type": "AbiEnvelopeDomain"
+                },
+                {
+                    "name": "payload_hash",
+                    "type": "bytes"
+                },
+                {
+                    "name": "operations",
+                    "type": "List<AbiManagedComplexVecItem>"
+                }
+            ]
+        },
+        "AbiEnvelopeDomain": {
+            "type": "enum",
+            "variants": [
+                {
+                    "name": "Alpha",
+                    "discriminant": 0
+                },
+                {
+                    "name": "Beta",
+                    "discriminant": 1
+                }
+            ]
+        },
+        "AbiManagedComplexVecItem": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "token_id",
+                    "type": "bytes"
+                },
+                {
+                    "name": "holder",
+                    "type": "Address"
+                },
+                {
+                    "name": "version",
+                    "type": "u64"
+                },
+                {
+                    "name": "body",
+                    "type": "bytes"
+                }
+            ]
+        },
         "AbiManagedType": {
             "type": "struct",
             "docs": [

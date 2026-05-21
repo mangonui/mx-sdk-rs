@@ -321,6 +321,62 @@ where
             .original_result()
     }
 
+    pub fn item_for_managed_complex_vec(
+        self,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedVec<Env::Api, AbiManagedComplexVecItem<Env::Api>>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("item_for_managed_complex_vec")
+            .original_result()
+    }
+
+    pub fn envelope_like_result(
+        self,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, AbiEnvelope<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("envelope_like_result")
+            .original_result()
+    }
+
+    pub fn validate_token_id_and_return_envelope<
+        Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
+    >(
+        self,
+        token_id: Arg0,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, AbiEnvelope<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("validate_token_id_and_return_envelope")
+            .argument(&token_id)
+            .original_result()
+    }
+
+    pub fn validate_constant_token_id_and_return_envelope(
+        self,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, AbiEnvelope<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("validate_constant_token_id_and_return_envelope")
+            .original_result()
+    }
+
+    pub fn set_token_scoped_value_and_return_envelope<
+        Arg0: ProxyArg<ManagedBuffer<Env::Api>>,
+        Arg1: ProxyArg<ManagedBuffer<Env::Api>>,
+    >(
+        self,
+        token_id: Arg0,
+        value: Arg1,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, AbiEnvelope<Env::Api>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("set_token_scoped_value_and_return_envelope")
+            .argument(&token_id)
+            .argument(&value)
+            .original_result()
+    }
+
     pub fn echo_permission<
         Arg0: ProxyArg<Permission>,
     >(
@@ -540,6 +596,34 @@ pub struct OnlyShowsUpAsNestedInArrayVec {}
 pub struct AbiManagedVecItem {
     pub value1: u32,
     pub value2: u32,
+}
+
+#[type_abi]
+#[derive(
+    NestedEncode, NestedDecode, TopEncode, TopDecode, ManagedVecItem, Clone, PartialEq, Eq, Debug,
+)]
+pub struct AbiManagedComplexVecItem<M: ManagedTypeApi> {
+    pub token_id: ManagedBuffer<M>,
+    pub holder: ManagedAddress<M>,
+    pub version: u64,
+    pub body: ManagedBuffer<M>,
+}
+
+#[type_abi]
+#[derive(
+    NestedEncode, NestedDecode, TopEncode, TopDecode, ManagedVecItem, Clone, PartialEq, Eq, Debug,
+)]
+pub enum AbiEnvelopeDomain {
+    Alpha,
+    Beta,
+}
+
+#[type_abi]
+#[derive(NestedEncode, NestedDecode, TopEncode, TopDecode, Clone, PartialEq, Eq, Debug)]
+pub struct AbiEnvelope<M: ManagedTypeApi> {
+    pub domain: AbiEnvelopeDomain,
+    pub payload_hash: ManagedBuffer<M>,
+    pub operations: ManagedVec<M, AbiManagedComplexVecItem<M>>,
 }
 
 #[type_abi]

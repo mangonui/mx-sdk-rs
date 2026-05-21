@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           32
+// Endpoints:                           37
 // Async Callback (empty):               1
-// Total number of exported functions:  35
+// Total number of exported functions:  40
 
 #![no_std]
 
@@ -40,6 +40,11 @@ multiversx_sc_wasm_adapter::endpoints! {
         item_for_vec => item_for_vec
         item_for_array_vec => item_for_array_vec
         item_for_managed_vec => item_for_managed_vec
+        item_for_managed_complex_vec => item_for_managed_complex_vec
+        envelope_like_result => envelope_like_result
+        validate_token_id_and_return_envelope => validate_token_id_and_return_envelope
+        validate_constant_token_id_and_return_envelope => validate_constant_token_id_and_return_envelope
+        set_token_scoped_value_and_return_envelope => set_token_scoped_value_and_return_envelope
         echo_permission => echo_permission
         item_for_array => item_for_array
         item_for_box => item_for_box

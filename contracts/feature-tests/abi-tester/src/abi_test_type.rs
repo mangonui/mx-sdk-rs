@@ -3,7 +3,10 @@ use bitflags::bitflags;
 use multiversx_sc::{
     api::ManagedTypeApi,
     typenum::U2,
-    types::{BigUint, Box, ConstDecimals, ManagedBuffer, ManagedBufferReadToEnd, ManagedDecimal},
+    types::{
+        BigUint, Box, ConstDecimals, ManagedAddress, ManagedBuffer, ManagedBufferReadToEnd,
+        ManagedDecimal, ManagedVec,
+    },
 };
 multiversx_sc::derive_imports!();
 
@@ -37,6 +40,34 @@ pub struct AbiManagedType<M: ManagedTypeApi> {
 pub struct AbiManagedVecItem {
     pub value1: u32,
     pub value2: u32,
+}
+
+#[type_abi]
+#[derive(
+    NestedEncode, NestedDecode, TopEncode, TopDecode, ManagedVecItem, Clone, PartialEq, Eq, Debug,
+)]
+pub struct AbiManagedComplexVecItem<M: ManagedTypeApi> {
+    pub token_id: ManagedBuffer<M>,
+    pub holder: ManagedAddress<M>,
+    pub version: u64,
+    pub body: ManagedBuffer<M>,
+}
+
+#[type_abi]
+#[derive(
+    NestedEncode, NestedDecode, TopEncode, TopDecode, ManagedVecItem, Clone, PartialEq, Eq, Debug,
+)]
+pub enum AbiEnvelopeDomain {
+    Alpha,
+    Beta,
+}
+
+#[type_abi]
+#[derive(NestedEncode, NestedDecode, TopEncode, TopDecode, Clone, PartialEq, Eq, Debug)]
+pub struct AbiEnvelope<M: ManagedTypeApi> {
+    pub domain: AbiEnvelopeDomain,
+    pub payload_hash: ManagedBuffer<M>,
+    pub operations: ManagedVec<M, AbiManagedComplexVecItem<M>>,
 }
 
 #[type_abi]
